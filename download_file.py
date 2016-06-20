@@ -68,6 +68,22 @@ https://4024-idr203-ef5458d-jseth.demo.encodedcc.org/experiments/ENCSR849OTN/
 https://4024-idr203-ef5458d-jseth.demo.encodedcc.org/experiments/ENCSR904IXG/
 """.split()
 
+# IPSC and 
+experiment_urls = """
+https://4024-idr203-ef5458d-jseth.demo.encodedcc.org/experiments/ENCSR447FVP/
+https://4024-idr203-ef5458d-jseth.demo.encodedcc.org/experiments/ENCSR655HDE/
+https://4024-idr203-ef5458d-jseth.demo.encodedcc.org/experiments/ENCSR328AHC/
+""".split()
+
+experiment_urls = """
+https://www.encodeproject.org/experiments/ENCSR195ZCD/
+https://www.encodeproject.org/experiments/ENCSR398JTO/
+""".split()
+
+encoded_access_key = 'ONRL3ZRO'
+encoded_secret_access_key = 'sw5vjtgc7k2fen7x'
+#encoded_access_key = '2KMYOYKL'
+#encoded_secret_access_key = 'pynx26slwsehxyln'
 
 def iter_fastq_fnames(chipseq_fastqs):
     assert len(chipseq_fastqs[1]) == len(chipseq_fastqs[2])
@@ -96,9 +112,6 @@ def iter_fastq_fnames(chipseq_fastqs):
 
 def download_file( url ):
     base = urlparse.urlunsplit(list(urlparse.urlsplit(url)[:2]) + ['', '', ''])
-    encoded_access_key = '2KMYOYKL'
-    encoded_secret_access_key = 'pynx26slwsehxyln'
-
     headers = {
         'Content-type': 'application/json',
         'Accept': 'application/json',
@@ -143,9 +156,8 @@ def find_controls(exp_ids):
     for experiment_id in exp_ids:
         print experiment_id
         print control_exp_ids
-        encoded_access_key = '2KMYOYKL'
-        encoded_secret_access_key = 'pynx26slwsehxyln'
-        URL = "https://4024-idr203-ef5458d-jseth.demo.encodedcc.org/experiments/{}/".format(experiment_id)
+        #URL = "https://4024-idr203-ef5458d-jseth.demo.encodedcc.org/experiments/{}/".format(experiment_id)
+        #URL = "https://www.encodeproject.org/experiments/{}/".format(experiment_id)
         response = requests.get(
             URL,
             headers={'accept': 'application/json'},
