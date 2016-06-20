@@ -201,17 +201,17 @@ def test():
         participants_team = syn.store(Team(
             name='Participants Group',
             description='A team for people who have joined the challenge'))
+        print syn.setPermissions(project, participants_team.id, ['READ', 'DOWNLOAD'])
+        for evaluation in find_or_create_evaluations():
+            print syn.setPermissions(
+                evaluation,
+                participants_team.id, [
+                    'CREATE', 'READ', 'UPDATE',
+                    'PARTICIPATE', 'SUBMIT', 'READ_PRIVATE_SUBMISSION'
+                ]
+            )
         print "Created team %s %s" % (participants_team.id, participants_team.name)
 
-    print syn.setPermissions(project, participants_team.id, ['READ', 'DOWNLOAD'])
-    for evaluation in find_or_create_evaluations():
-        print syn.setPermissions(
-            evaluation,
-            participants_team.id, [
-                'CREATE', 'READ', 'UPDATE',
-                'PARTICIPATE', 'SUBMIT', 'READ_PRIVATE_SUBMISSION'
-            ]
-        )
     ids['participants_team'] = participants_team.id
 
     ## the challenge object associates the challenge project with the
@@ -246,25 +246,15 @@ def test():
             'challengeId': challenge_object['id'] }
         test_submissions_team = syn.restPOST('/challenge/{challengeId}/challengeTeam'.format(
             challengeId=challenge_object['id']), json.dumps(request_body))
-    elif test_submissions_teams['totalNumberOfResults'] == 1:
+    elif test_submissions_teams['totalNumberOfResults'] >= 1:
         test_submissions_team = test_submissions_teams['results'][0]
         ids['test_submissions_team'] = test_submissions_team['id']
         print "Restored a team to test submissions: %s" % (
             test_submissions_team['id'], )
     else:
+        print test_submissions_teams
         assert False, "We only expect a single test submission user."
 
-    # Trying to debug the "You must be a Challenge participant for this operation."
-    # I thought maybe I needed to re-add the team to the challenge, but that
-    # doesn't seem to help at all
-    """
-    request_body = {
-        'teamId': participants_team.id,
-        'challengeId': challenge_object['id'] }
-    test_submissions_team = syn.restPOST('/challenge/{challengeId}/challengeTeam'.format(
-        challengeId=challenge_object['id']), json.dumps(request_body))
-    """
-    
     # Create the participant project
     try:
         participant_project = syn.get("syn6170604")
@@ -277,10 +267,10 @@ def test():
     
     for evaluation in find_or_create_evaluations():
         participant_file = syn.store(File(
-            synapseclient.utils.make_bogus_data_file(), parent=participant_project))
+            synapseclient.utils.make_bogus_data_file(),
+            parent=participant_project))
         syn.submit(evaluation=evaluation,
                    entity=participant_file,
-                   #team="Test Submission Team",
                    team="Participants Group",
         )
     return

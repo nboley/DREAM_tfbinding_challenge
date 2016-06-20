@@ -6,7 +6,7 @@ from scipy.stats import itemfreq
 
 import pybedtools
 
-from lib import build_label_array_from_bed
+from .lib import build_label_array_from_bed
 
 def _build_regions_labels_from_beds(
         regions_bed, regions_w_flank_bed, feature_bed):
@@ -41,7 +41,7 @@ def build_regions_peaks_labels(
     print optimal_labels
 
 def find_relaxed_peak_bed_tools(tfname):
-    path = "/mnt/data/TF_binding/DREAM_challenge/chipseq/all_peaks/relaxed_peaks/"
+    path = "/mnt/data/TF_binding/DREAM_challenge/chipseq/peaks/relaxed_peaks/"
     peak_files = defaultdict(list)
     for fname in os.listdir(path):
         file_tfname, sample = fname.split(".")[1:3]
