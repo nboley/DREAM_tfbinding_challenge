@@ -6,7 +6,7 @@ from scipy.stats import itemfreq
 
 import pybedtools
 
-from .lib import build_label_array_from_bed
+from lib import build_label_array_from_bed
 
 def _build_regions_labels_from_beds(
         regions_bed, regions_w_flank_bed, feature_bed):
@@ -56,7 +56,6 @@ def find_relaxed_peak_bed_tools(tfname):
 def main():
     tf_name = sys.argv[1]
     regions_bed = pybedtools.BedTool(sys.argv[2]) #.sort()
-    regions_w_flank_bed = pybedtools.BedTool(sys.argv[3]) #.sort()
     relaxed_peak_bed_tools = find_relaxed_peak_bed_tools(tf_name)
     
     #build_regions_peaks_labels(sys.argv[1], sys.argv[2])

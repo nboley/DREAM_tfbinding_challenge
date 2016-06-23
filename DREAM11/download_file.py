@@ -80,10 +80,28 @@ https://www.encodeproject.org/experiments/ENCSR195ZCD/
 https://www.encodeproject.org/experiments/ENCSR398JTO/
 """.split()
 
-encoded_access_key = 'ONRL3ZRO'
-encoded_secret_access_key = 'sw5vjtgc7k2fen7x'
-#encoded_access_key = '2KMYOYKL'
-#encoded_secret_access_key = 'pynx26slwsehxyln'
+experiment_urls = """
+#https://4024-idr203-ef5458d-jseth.demo.encodedcc.org/experiments/ENCSR028UIU/
+#https://4024-idr203-ef5458d-jseth.demo.encodedcc.org/experiments/ENCSR205FOW/
+#https://4024-idr203-ef5458d-jseth.demo.encodedcc.org/experiments/ENCSR480LIS/
+#https://4024-idr203-ef5458d-jseth.demo.encodedcc.org/experiments/ENCSR972ZBV/
+##https://4024-idr203-ef5458d-jseth.demo.encodedcc.org/experiments/ENCSR897JAS/
+https://4024-idr203-ef5458d-jseth.demo.encodedcc.org/experiments/ENCSR494MFV/
+https://4024-idr203-ef5458d-jseth.demo.encodedcc.org/experiments/ENCSR000EVJ/
+https://4024-idr203-ef5458d-jseth.demo.encodedcc.org/experiments/ENCSR124JFW/
+https://4024-idr203-ef5458d-jseth.demo.encodedcc.org/experiments/ENCSR121KID/
+https://4024-idr203-ef5458d-jseth.demo.encodedcc.org/experiments/ENCSR837GTK/
+https://4024-idr203-ef5458d-jseth.demo.encodedcc.org/experiments/ENCSR196HGZ/
+https://4024-idr203-ef5458d-jseth.demo.encodedcc.org/experiments/ENCSR555PBN/
+https://4024-idr203-ef5458d-jseth.demo.encodedcc.org/experiments/ENCSR000BMT/
+https://4024-idr203-ef5458d-jseth.demo.encodedcc.org/experiments/ENCSR924TVL/
+https://4024-idr203-ef5458d-jseth.demo.encodedcc.org/experiments/ENCSR101FJT/
+""".split()
+
+#encoded_access_key = 'ONRL3ZRO'
+#encoded_secret_access_key = 'sw5vjtgc7k2fen7x'
+encoded_access_key = '2KMYOYKL'
+encoded_secret_access_key = 'pynx26slwsehxyln'
 
 def iter_fastq_fnames(chipseq_fastqs):
     assert len(chipseq_fastqs[1]) == len(chipseq_fastqs[2])
@@ -170,6 +188,7 @@ def find_controls(exp_ids):
 
 def download_fastqs():
     for i, url in enumerate(experiment_urls):
+        if url.startswith("#"): continue
         #if i != 28: continue
         print "Processing ", i, len(experiment_urls), url
         download_file(url)
