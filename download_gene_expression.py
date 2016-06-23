@@ -17,9 +17,34 @@ def load_eid_mapping():
     curr.execute(query)
     return dict(curr.fetchall())
 
+already_have = """
+GM12878
+HepG2
+K562
+liver
+MCF-7
+PC-3
+""".split()
+
+sample_types = """
+A549
+GM12878
+H1-hESC
+HCT116
+HeLa-S3
+HepG2
+HL-60
+IMR-90
+K562
+MCF-7
+NB4
+Panc1
+SK-N-SH
+""".split()
+
 def main():
-    sample_types = load_samples()
-    eid_mapping = load_eid_mapping()
+    print sample_types
+    assert False
     for exp_id in find_ENCODE_RNAseq_experiment_ids('hg19'):
         files = list(find_ENCODE_DCC_experiment_files(exp_id))
         if files[0].sample_type not in sample_types: continue
