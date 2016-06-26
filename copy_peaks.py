@@ -3,6 +3,10 @@ import os, sys
 from subprocess import check_output
 from collections import namedtuple, defaultdict
 
+from grit.lib.multiprocessing_utils import run_in_parallel
+
+from DREAM11.build_region_labels import build_regions_labels_from_beds
+
 METADATA_TSV = "/mnt/data/TF_binding/DREAM_challenge/chipseq/peaks/DREAM_TFs_FINAL_SAMPLE_SHEET.v2.tsv"
 
 MetaDataRecord = namedtuple('MetaDataRecord', [
@@ -11,9 +15,11 @@ MetaDataRecord = namedtuple('MetaDataRecord', [
 samples_to_skip = []
 #"CHIPseq.E2F6.HeLa-S3.EXPID_ENCSR000EVK"
 
+TRAIN_REGIONS_BED = "/mnt/data/TF_binding/DREAM_challenge/public_data/annotations/train_regions.blacklisted.bed.gz"
 CHIPSEQ_IDR_PEAKS_DIR = "/mnt/data/TF_binding/DREAM_challenge/public_data/chipseq/peaks/idr/"
 CHIPSEQ_RELAXED_PEAKS_DIR = "/mnt/data/TF_binding/DREAM_challenge/public_data/chipseq/peaks/naive_overlap/"
 CHIPSEQ_FOLD_CHANGE_DIR = "/mnt/data/TF_binding/DREAM_challenge/public_data/chipseq/fold_change_signal/"
+CHIPSEQ_LABELS = "/mnt/data/TF_binding/DREAM_challenge/public_data/chipseq/peaks/labels/"
 
 def find_num_peaks(fname):
     return int(check_output("zcat {} | wc -l".format(fname) , shell=True))
@@ -181,9 +187,50 @@ def copy_DNASE_files():
     
     pass
 
+def build_train_region_wiggles():
+    pass
+
+def build_labels_for_sample_and_factor(
+        regions_fname, idr_peaks_fname, relaxed_peaks_fname):
+    sample, factor = idr_peaks_fname.split(".")[1:3]
+    assert (sample, factor) == relaxed_peaks_fname.split(".")[1:3]
+    print "Processing ", sample, factor
+    regions_bed = pybedtools.BedTool(regions_fname) #.sort() - already sorted
+    relaxed_peaks_bed = pybedtools.BedTool(relaxed_peaks_fname).sort().merge()
+    idr_peaks_bed = pybedtools.BedTool(idr_peaks_fname).sort().merge()
+
+    labels = build_regions_labels_from_beds(
+        regions_bed, relaxed_peaks_bed, idr_peaks_bed)
+    ofname = "%s.%s.train.labels" % (sample, tf_name)
+    print "Saving to %s" % ofname
+    np.save(ofname, labels)
+    return
+
+def build_labels():
+    matched_peaks = defaultdict(lambda: {'idr': None, 'relaxed': None})
+    for fname in os.listdir(CHIPSEQ_IDR_PEAKS_DIR):
+        sample, factor = fname.split(".")[1:3]
+        assert matched_peaks[(sample, factor)]['idr'] is None
+        matched_peaks[(sample, factor)]['idr'] = os.path.join(
+            CHIPSEQ_IDR_PEAKS_DIR, fname)
+
+    for fname in os.listdir(CHIPSEQ_RELAXED_PEAKS_DIR):
+        sample, factor = fname.split(".")[1:3]
+        assert matched_peaks[(sample, factor)]['idr'] is not None
+        assert matched_peaks[(sample, factor)]['relaxed'] is None
+        matched_peaks[(sample, factor)]['relaxed'] = os.path.join(
+            CHIPSEQ_RELAXED_PEAKS_DIR, fname)
+
+    all_args = []
+    for (sample, factor), fnames in matched_peaks.iteritems():
+        all_args.append((TRAIN_REGIONS_BED, fnames['idr'], fnames['relaxed']))
+    run_in_parallel(16, build_labels_for_sample_and_factor, all_args)
+    return
+    
 def main():
     #copy_chipseq_data()
-    copy_DNASE_files()
+    #copy_DNASE_files()
+    build_labels()
 
 if __name__ == '__main__':
     main()

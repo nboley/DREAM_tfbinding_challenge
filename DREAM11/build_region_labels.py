@@ -1,5 +1,6 @@
 import os, sys
 from collections import defaultdict
+from itertools import izip
 
 import numpy as np
 from scipy.stats import itemfreq
@@ -8,57 +9,67 @@ import pybedtools
 
 from lib import build_label_array_from_bed
 
-def _build_regions_labels_from_beds(
-        regions_bed, regions_w_flank_bed, feature_bed):
+def build_regions_labels_from_beds(
+        regions_bed, optimal_peaks_bed, relaxed_peaks_bed):
     # we assume that regions_bed and regions_w_flank_bed are sorted
-    feature_bed = feature_bed.sort()
-    print "Feature bed", feature_bed.fn
-    print "Regions bed", regions_bed.fn
-    print "Building flank labels ...",
-    flank_labels_bed = regions_w_flank_bed.intersect(
-            b=feature_bed, c=True, f=1e-12, F=1e-12, e=True)
-    flank_labels = build_label_array_from_bed(flank_labels_bed)
-    print "Building core labels ...",
-    core_labels_bed = regions_bed.intersect(
-            b=feature_bed, c=True, f=0.5, F=0.5, e=True)
-    core_labels = build_label_array_from_bed(core_labels_bed)
-    core_labels_bed.saveas("tmp.test.bed")
-    labels = core_labels.copy()
-    labels[core_labels != flank_labels] = -1
-    print "FINISHED Building labels"
+    #print "Building optimal labels ..."
+    optimal_peaks_bed = optimal_peaks_bed.sort()
+    optimal_labels_bed = regions_bed.intersect(
+            b=optimal_peaks_bed, c=True, f=0.5, F=0.5, e=True)
+    optimal_labels = build_label_array_from_bed(optimal_labels_bed)
+
+    #print "Building relaxed labels ..."
+    relaxed_peaks_bed = relaxed_peaks_bed.sort()
+    relaxed_labels_bed = regions_bed.intersect(
+            b=relaxed_peaks_bed, c=True, f=1e-6, F=1e-6, e=True)
+    relaxed_labels = build_label_array_from_bed(relaxed_labels_bed)
+
+    labels = optimal_labels.copy()
+    labels[optimal_labels != relaxed_labels] = -1
+    print "FINISHED Building Merged Labels"
     print itemfreq(labels)
     return labels
 
-def build_regions_peaks_labels(
-        regions_bed,
-        regions_w_flank_bed,
-        optimal_peaks_fname,
-        relaxed_peaks_fname):
-    optimal_peaks_bed = pybedtools.BedTool(optimal_peaks_fname).sort().merge()
-    relaxed_peaks_bed = pybedtools.BedTool(relaxed_peaks_fname).sort().merge()
-    optimal_labels = _build_regions_labels_from_beds(
-        regions_bed, regions_w_flank_bed, optimal_peaks_bed)
-    print optimal_labels
-
-def find_relaxed_peak_bed_tools(tfname):
-    path = "/mnt/data/TF_binding/DREAM_challenge/chipseq/peaks/relaxed_peaks/"
+def iter_peak_bed_tools(tfname, path):
     peak_files = defaultdict(list)
     for fname in os.listdir(path):
+        if not fname.startswith('CHIPseq'): continue
         file_tfname, sample = fname.split(".")[1:3]
         if file_tfname != tfname: continue
         peak_files[sample].append(os.path.join(path, fname))
 
     bed_tools = []
-    for sample_type, fnames in peak_files.iteritems():
-        print sample_type, fnames
-    assert False
+    for sample_type, fnames in sorted(peak_files.iteritems()):
+        if len(fnames) == 1:
+            bed_tools.append(
+                (sample_type,
+                 pybedtools.BedTool(fnames[0]).sort().merge())
+            )
+        else:
+            bed_tools.append(
+                (sample_type,
+                 pybedtools.BedTool(fnames[0]).cat(*fnames[1:]).sort().merge())
+            )
+        yield bed_tools[-1]    
+    return
 
 def main():
     tf_name = sys.argv[1]
-    regions_bed = pybedtools.BedTool(sys.argv[2]) #.sort()
-    relaxed_peak_bed_tools = find_relaxed_peak_bed_tools(tf_name)
+    regions_bed = pybedtools.BedTool(sys.argv[2]).sort()
+    relaxed_peak_bed_tools = iter_peak_bed_tools(
+        tf_name, "/mnt/data/TF_binding/DREAM_challenge/public_data/chipseq/peaks/naive_overlap/")
+    optimal_peak_bed_tools = iter_peak_bed_tools(
+        tf_name, "/mnt/data/TF_binding/DREAM_challenge/public_data/chipseq/peaks/idr/")
     
-    #build_regions_peaks_labels(sys.argv[1], sys.argv[2])
-
+    for (sample_type_1, relaxed_bed_tool), (sample_type_2, optimal_bed_tool) in izip(
+            relaxed_peak_bed_tools, optimal_peak_bed_tools):
+        print "Processing ", sample_type_1, sample_type_2
+        assert sample_type_1 == sample_type_2
+        labels = build_regions_labels_from_beds(
+            regions_bed, relaxed_bed_tool, optimal_bed_tool)
+        ofname = "%s.%s" % (tf_name, sample_type_1)
+        print "Saving to %s" % ofname
+        np.save(ofname, labels)
+    
 if __name__ == '__main__':
     main()

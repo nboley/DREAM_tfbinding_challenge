@@ -98,6 +98,12 @@ https://4024-idr203-ef5458d-jseth.demo.encodedcc.org/experiments/ENCSR924TVL/
 https://4024-idr203-ef5458d-jseth.demo.encodedcc.org/experiments/ENCSR101FJT/
 """.split()
 
+experiment_urls = """
+#https://4024-idr203-ef5458d-jseth.demo.encodedcc.org/experiments/ENCSR000EVK/
+#https://4024-idr203-ef5458d-jseth.demo.encodedcc.org/experiments/ENCSR541WQI/
+https://4024-idr203-ef5458d-jseth.demo.encodedcc.org/experiments/ENCSR897JAS/
+""".split()
+
 #encoded_access_key = 'ONRL3ZRO'
 #encoded_secret_access_key = 'sw5vjtgc7k2fen7x'
 encoded_access_key = '2KMYOYKL'
@@ -191,6 +197,7 @@ def download_fastqs():
         if url.startswith("#"): continue
         #if i != 28: continue
         print "Processing ", i, len(experiment_urls), url
+        print url
         download_file(url)
         
 def main():
