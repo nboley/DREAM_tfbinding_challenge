@@ -8,24 +8,30 @@ import numpy as np
 
 from grit.lib.multiprocessing_utils import run_in_parallel
 
-regions="/mnt/data/TF_binding/DREAM_challenge/annotations/train_regions.bed.gz"
-labels_dir = "/mnt/data/TF_binding/DREAM_challenge/chipseq/peaks/label_mats/"
+from copy_peaks import find_num_peaks
 
-def build_labels_tsv(sample, factors_and_fnames):
+regions="/mnt/data/TF_binding/DREAM_challenge/public_data/annotations/train_regions.blacklisted.bed.gz"
+labels_dir = "/mnt/data/TF_binding/DREAM_challenge/public_data/chipseq/peaks/labels/arrays"
+
+def build_labels_tsv(ofname, samples_and_fnames):
     regions_fp = gzip.open(regions)
 
-    print "processing", sample
-    factors_and_fnames.sort()
+    print "processing", ofname
+    samples_and_fnames.sort()
     all_data = []
-    for factor, fname in factors_and_fnames:
+    for sample, fname in samples_and_fnames:
         all_data.append(np.load(fname))
-        #print sample, factor, all_data[-1].shape
     all_data = np.vstack(all_data).T
+    # make sure that the label matrix and regions bed file have the same number
+    # of peaks
+    print all_data.shape[0], find_num_peaks(regions)
+    assert all_data.shape[0] == find_num_peaks(regions)
+    
     # B, U, A
-    with open("%s.labels.tsv" % sample, "w") as ofp:
+    with gzip.open(ofname + ".gz", "w") as ofp:
         # write the header
         ofp.write("\t".join(
-            ["chr", "start", "stop"] + [x[0] for x in factors_and_fnames])
+            ["chr", "start", "stop"] + [x[0] for x in samples_and_fnames])
                   + "\n")
         for i, (region_line, row) in enumerate(izip(regions_fp, all_data)):
             if i%1000000 == 0:
@@ -38,10 +44,11 @@ def main():
     sample_grpd_labels = defaultdict(list)
     for fname in os.listdir(labels_dir):
         if not fname.endswith(".npy"): continue
-        factor, sample_type, _ = fname.split(".")
-        sample_grpd_labels[sample_type].append(
-            (factor, os.path.join(labels_dir, fname)))
-    
+        sample, factor, split_name, _, _ = fname.split(".")
+        ofname = "%s.%s.labels.tsv" % (factor, split_name)
+        sample_grpd_labels[os.path.join(labels_dir, "..", ofname)].append(
+            (sample, os.path.join(labels_dir, fname)))
+
     args = list(sample_grpd_labels.iteritems())
     run_in_parallel(16, build_labels_tsv, args)
     return
