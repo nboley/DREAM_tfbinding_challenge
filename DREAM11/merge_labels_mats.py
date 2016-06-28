@@ -11,9 +11,9 @@ from grit.lib.multiprocessing_utils import run_in_parallel
 from copy_peaks import find_num_peaks
 
 regions="/mnt/data/TF_binding/DREAM_challenge/public_data/annotations/train_regions.blacklisted.bed.gz"
-labels_dir = "/mnt/data/TF_binding/DREAM_challenge/public_data/chipseq/peaks/labels/arrays"
+labels_dir = "/mnt/data/TF_binding/DREAM_challenge/public_data/chipseq/labels/arrays"
 
-def build_labels_tsv(ofname, samples_and_fnames):
+def build_labels_tsv(ofname, samples_and_fnames, regions_fname):
     regions_fp = gzip.open(regions)
 
     print "processing", ofname
@@ -49,7 +49,7 @@ def main():
         sample_grpd_labels[os.path.join(labels_dir, "..", ofname)].append(
             (sample, os.path.join(labels_dir, fname)))
 
-    args = list(sample_grpd_labels.iteritems())
+    args = [x + [regions,] for x in sample_grpd_labels.iteritems()]
     run_in_parallel(16, build_labels_tsv, args)
     return
     

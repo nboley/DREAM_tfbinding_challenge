@@ -53,12 +53,19 @@ def upload_dnase_naive_overlap_peaks():
         data.annotations['sample_type'] = fname.split(".")[1]
         data = syn.store(data)
 
+def upload_dnase_data():
+    upload_dnase_idr_peaks()
+    upload_dnase_naive_overlap_peaks()
+    upload_dnase_fold_coverage_wiggles()
+    upload_dnase_bams()
+    return
+
 ################################################################################
 #
 #
 
 def upload_chipseq_conservative_peaks():
-    folder_id = "syn6176844"
+    folder_id = "syn6181337"
     path = "/mnt/data/TF_binding/DREAM_challenge/public_data/chipseq/peaks/idr/"
     parent = syn.get(folder_id)
     for fname in os.listdir(path):
@@ -68,7 +75,7 @@ def upload_chipseq_conservative_peaks():
         data = syn.store(data)
 
 def upload_chipseq_relaxed_peaks():
-    folder_id = "syn6176843"
+    folder_id = "syn6181338"
     path = "/mnt/data/TF_binding/DREAM_challenge/public_data/chipseq/peaks/naive_overlap/"
     parent = syn.get(folder_id)
     for fname in os.listdir(path):
@@ -78,7 +85,7 @@ def upload_chipseq_relaxed_peaks():
         data = syn.store(data)
 
 def upload_chipseq_fold_change_wiggles():
-    folder_id = "syn6176342"
+    folder_id = "syn6181334"
     path = "/mnt/data/TF_binding/DREAM_challenge/public_data/chipseq/fold_change_signal/"
     parent = syn.get(folder_id)
     for fname in os.listdir(path):
@@ -90,8 +97,8 @@ def upload_chipseq_fold_change_wiggles():
         data = syn.store(data)
 
 def upload_chipseq_labels():
-    folder_id = "syn6176409"
-    path = "/mnt/data/TF_binding/DREAM_challenge/public_data/chipseq/labels"
+    folder_id = "syn6181335"
+    path = "/mnt/data/TF_binding/DREAM_challenge/public_data/chipseq/labels/tsvs/"
     parent = syn.get(folder_id)
     for fname in os.listdir(path):
         data = File(os.path.join(path, fname),parent=parent)
@@ -115,6 +122,7 @@ def upload_annotations():
     for fname in os.listdir(path):
         data = File(os.path.join(path, fname),parent=parent)
         data = syn.store(data)
+    return
 
 def upload_rnaseq_data():
     folder_id = "syn6176231"
@@ -125,27 +133,22 @@ def upload_rnaseq_data():
         data.annotations['sample_type'] = fname.split(".")[1]
         data.annotations['biological_replicate'] = int(fname.split(".")[2][6:])
         data = syn.store(data)
-
-        
-def upload_dnase_data():
-    upload_dnase_idr_peaks()
-    upload_dnase_naive_overlap_peaks()
-    upload_dnase_fold_coverage_wiggles()
-    upload_dnase_bams()
     return
 
-def upload_chipseq_data():
-    #upload_chipseq_conservative_peaks()
-    #upload_chipseq_relaxed_peaks()
-    upload_chipseq_fold_change_wiggles()
+def upload_essential_data_tar():
+    folder_id = "syn6112317"
+    fname = "/mnt/data/TF_binding/DREAM_challenge/public_data/essential_training_data.tar"
+    parent = syn.get(folder_id)
+    data = File(fname, parent=parent)
+    data = syn.store(data)
     return
 
 def main():
-    upload_chipseq_labels()
+    upload_essential_data_tar()
     #upload_rnaseq_data()
     #upload_annotations()
-    #upload_chipseq_data()
     #upload_dnase_data()
+    #upload_chipseq_data()
     pass
 
 if __name__ == '__main__':

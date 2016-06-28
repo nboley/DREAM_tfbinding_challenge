@@ -10,11 +10,13 @@ import pybedtools
 from grit.lib.multiprocessing_utils import run_in_parallel
 
 from build_region_labels import build_regions_labels_from_beds
+from merge_labels_mats import build_labels_tvs
 
-METADATA_TSV = "/mnt/data/TF_binding/DREAM_challenge/DREAM_TFs_FINAL_SAMPLE_SHEET.v3.tsv"
+METADATA_TSV = "/mnt/data/TF_binding/DREAM_challenge/DREAM_TFs_FINAL_SAMPLE_SHEET.v4.tsv"
 
 MetaDataRecord = namedtuple('MetaDataRecord', [
-    "IDX", "SAMPLE_NAME", "TF", "CELL_TYPE", "ENCODE_ID", "HIDDEN_TEST_SET",
+    "IDX", "SAMPLE_NAME", "TF", "CELL_TYPE", "ENCODE_ID",
+    "HIDDEN_TEST_SET", "LADDER_BOARD_SET",
     "TODO", "NOT_RELEASED", "LOWEST_QUALITY_REPLICATE", "MISSING_RNASEQ"])
 
 samples_to_skip = []
@@ -40,10 +42,10 @@ def load_metadata(fname=METADATA_TSV):
     with open(fname) as fp:
         for i, line in enumerate(fp):
             # skip the header
-            if i == 0: continue
+            if i < 3: continue
             data = line.strip().split("\t")
             data[0] = int(data[0])
-            data[-5:] = [bool(int(x)) for x in data[-5:]]
+            data[-6:] = [bool(int(x)) for x in data[-6:]]
             all_data.append(MetaDataRecord(*data))
     return all_data
 
@@ -160,6 +162,7 @@ def copy_public_chipseq_data():
         if (x.SAMPLE_NAME != ''
             and not x.TODO
             and not x.HIDDEN_TEST_SET
+            and not x.LADDER_BOARD_SET
             and not x.LOWEST_QUALITY_REPLICATE
             and not x.MISSING_RNASEQ)
     )
@@ -300,18 +303,36 @@ def build_labels(overwrite_existing=False):
 
     all_args = []
     output_dir = \
-        "/mnt/data/TF_binding/DREAM_challenge/public_data/chipseq/peaks/labels/"
+        "/mnt/data/TF_binding/DREAM_challenge/public_data/chipseq/labels/arrays/"
     for (sample, factor), fnames in matched_peaks.iteritems():
         all_args.append(
             (TRAIN_REGIONS_BED, fnames['idr'], fnames['relaxed'], output_dir))
     run_in_parallel(16, build_labels_for_sample_and_factor, all_args)
     return
-    
+
+def build_labels_tsvs():
+    regions="/mnt/data/TF_binding/DREAM_challenge/public_data/annotations/train_regions.blacklisted.bed.gz"
+    labels_dir = "/mnt/data/TF_binding/DREAM_challenge/public_data/chipseq/labels/arrays"
+    output_dir = "/mnt/data/TF_binding/DREAM_challenge/public_data/chipseq/labels/tsvs"
+    sample_grpd_labels = defaultdict(list)
+    for fname in os.listdir(labels_dir):
+        if not fname.endswith(".npy"): continue
+        sample, factor, split_name, _, _ = fname.split(".")
+        ofname = "%s.%s.labels.tsv" % (factor, split_name)
+        sample_grpd_labels[os.path.join(output_dir, ofname)].append(
+            (sample, os.path.join(labels_dir, fname)))
+
+    args = [x + [regions,] for x in sample_grpd_labels.iteritems()]
+    run_in_parallel(16, build_labels_tsv, args)
+    return
+
+
 def main():
     #copy_private_chipseq_data()
-    copy_public_chipseq_data()
+    #copy_public_chipseq_data()
     #copy_DNASE_files()
     #build_labels()
-
+    #build_labels_tsvs()
+    
 if __name__ == '__main__':
     main()
