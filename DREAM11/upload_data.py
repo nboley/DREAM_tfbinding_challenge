@@ -116,7 +116,7 @@ def upload_chipseq_data():
 ################################################################################
 
 def upload_annotations():
-    folder_id = "syn6176228"
+    folder_id = "syn6184307"
     path = "/mnt/data/TF_binding/DREAM_challenge/public_data/annotations/"
     parent = syn.get(folder_id)
     for fname in os.listdir(path):
@@ -144,9 +144,9 @@ def upload_essential_data_tar():
     return
 
 def main():
-    upload_essential_data_tar()
+    #upload_essential_data_tar()
     #upload_rnaseq_data()
-    #upload_annotations()
+    upload_annotations()
     #upload_dnase_data()
     #upload_chipseq_data()
     pass
