@@ -108,9 +108,9 @@ def upload_chipseq_labels():
 
 def upload_chipseq_data():
     upload_chipseq_labels()
-    upload_chipseq_conservative_peaks()
-    upload_chipseq_relaxed_peaks()
-    upload_chipseq_fold_change_wiggles()
+    #upload_chipseq_conservative_peaks()
+    #upload_chipseq_relaxed_peaks()
+    #upload_chipseq_fold_change_wiggles()
     return
 
 ################################################################################
@@ -137,16 +137,23 @@ def upload_rnaseq_data():
 
 def upload_essential_data_tar():
     folder_id = "syn6112317"
-    fname = "/mnt/data/TF_binding/DREAM_challenge/public_data/essential_training_data.tar"
+    fnames = [
+        "/mnt/data/TF_binding/DREAM_challenge/public_data/training_data.annotations.tar",
+        "/mnt/data/TF_binding/DREAM_challenge/public_data/training_data.ChIPseq.tar",
+        #"/mnt/data/TF_binding/DREAM_challenge/public_data/training_data.DNASE_bams.tar",
+        "/mnt/data/TF_binding/DREAM_challenge/public_data/training_data.DNASE_wo_bams.tar",
+        "/mnt/data/TF_binding/DREAM_challenge/public_data/training_data.RNAseq.tar"
+    ]
     parent = syn.get(folder_id)
-    data = File(fname, parent=parent)
-    data = syn.store(data)
+    for fname in fnames:
+        data = File(fname, parent=parent)
+        data = syn.store(data)
     return
 
 def main():
-    #upload_essential_data_tar()
+    upload_essential_data_tar()
     #upload_rnaseq_data()
-    upload_annotations()
+    #upload_annotations()
     #upload_dnase_data()
     #upload_chipseq_data()
     pass

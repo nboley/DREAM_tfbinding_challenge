@@ -3,15 +3,19 @@ import gzip
 
 from itertools import izip
 from collections import defaultdict
+from subprocess import check_output
 
 import numpy as np
 
 from grit.lib.multiprocessing_utils import run_in_parallel
 
-from copy_peaks import find_num_peaks
+#from copy_peaks import find_num_peaks
 
-regions="/mnt/data/TF_binding/DREAM_challenge/public_data/annotations/train_regions.blacklisted.bed.gz"
+regions="/mnt/data/TF_binding/DREAM_challenge/public_data/annotations/train_regions.blacklistfiltered.bed.gz"
 labels_dir = "/mnt/data/TF_binding/DREAM_challenge/public_data/chipseq/labels/arrays"
+
+def find_num_peaks(fname):
+    return int(check_output("zcat {} | wc -l".format(fname) , shell=True))
 
 def build_labels_tsv(ofname, samples_and_fnames, regions_fname):
     regions_fp = gzip.open(regions)
@@ -45,11 +49,13 @@ def main():
     for fname in os.listdir(labels_dir):
         if not fname.endswith(".npy"): continue
         sample, factor, split_name, _, _ = fname.split(".")
+        if factor != 'FOXA2' and factor != 'ATF3': continue
         ofname = "%s.%s.labels.tsv" % (factor, split_name)
         sample_grpd_labels[os.path.join(labels_dir, "..", ofname)].append(
             (sample, os.path.join(labels_dir, fname)))
 
-    args = [x + [regions,] for x in sample_grpd_labels.iteritems()]
+    args = [list(x) + [regions,] for x in sample_grpd_labels.iteritems()]
+    #print args
     run_in_parallel(16, build_labels_tsv, args)
     return
     

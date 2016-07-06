@@ -10,9 +10,9 @@ import pybedtools
 from grit.lib.multiprocessing_utils import run_in_parallel
 
 from build_region_labels import build_regions_labels_from_beds
-from merge_labels_mats import build_labels_tvs
+from merge_labels_mats import * #build_labels_tsv
 
-METADATA_TSV = "/mnt/data/TF_binding/DREAM_challenge/DREAM_TFs_FINAL_SAMPLE_SHEET.v4.tsv"
+METADATA_TSV = "/mnt/data/TF_binding/DREAM_challenge/DREAM_TFs_FINAL_SAMPLE_SHEET.v5.tsv"
 
 MetaDataRecord = namedtuple('MetaDataRecord', [
     "IDX", "SAMPLE_NAME", "TF", "CELL_TYPE", "ENCODE_ID",
@@ -22,7 +22,7 @@ MetaDataRecord = namedtuple('MetaDataRecord', [
 samples_to_skip = []
 #"CHIPseq.E2F6.HeLa-S3.EXPID_ENCSR000EVK"
 
-TRAIN_REGIONS_BED = "/mnt/data/TF_binding/DREAM_challenge/public_data/annotations/train_regions.blacklisted.bed.gz"
+TRAIN_REGIONS_BED = "/mnt/data/TF_binding/DREAM_challenge/public_data/annotations/train_regions.blacklistfiltered.bed.gz"
 #TRAIN_REGIONS_BED = "/mnt/data/TF_binding/DREAM_challenge/public_data/chipseq/peaks/labels/tmp.bed.gz"
 CHIPSEQ_IDR_PEAKS_DIR = "/mnt/data/TF_binding/DREAM_challenge/public_data/chipseq/peaks/idr/"
 CHIPSEQ_RELAXED_PEAKS_DIR = "/mnt/data/TF_binding/DREAM_challenge/public_data/chipseq/peaks/naive_overlap/"
@@ -46,6 +46,9 @@ def load_metadata(fname=METADATA_TSV):
             data = line.strip().split("\t")
             data[0] = int(data[0])
             data[-6:] = [bool(int(x)) for x in data[-6:]]
+            #if MetaDataRecord(*data).TF != 'FOXA2' or MetaDataRecord(*data).CELL_TYPE != '':
+            #    continue
+            #print MetaDataRecord(*data)
             all_data.append(MetaDataRecord(*data))
     return all_data
 
@@ -127,13 +130,14 @@ def copy_chipseq_data(
     run_in_parallel(16, os.system, cmds)
 
     # copy the fold change wiggles
+    print sample_dirs
     fold_change_bigwigs = list(find_idr_peaks(
         sample_dirs,
         "/mnt/data/TF_binding/DREAM_challenge/all_data/chipseq/output/DREAM_challenge/{}/out/signal/macs2/pooled_rep/",
         ".fc.signal.bw"))
     cmds = []
     for i, (sample_name, pk_fname) in enumerate(fold_change_bigwigs):
-        #print i, len(fold_change_bigwigs)
+        print i, len(fold_change_bigwigs)
         try:
             sample, factor = sample_and_factor_from_samplename(sample_name)
             ofname = "ChIPseq.{factor}.{sample}.fc.signal.train.bw".format(
@@ -160,18 +164,21 @@ def copy_public_chipseq_data():
     train_sample_dirs = set(
         x.SAMPLE_NAME for x in metadata
         if (x.SAMPLE_NAME != ''
+            and x.SAMPLE_NAME == 'CHIPseq.ATF2.MCF-7.EXPID_ENCSR881UOO'
             and not x.TODO
             and not x.HIDDEN_TEST_SET
             and not x.LADDER_BOARD_SET
             and not x.LOWEST_QUALITY_REPLICATE
             and not x.MISSING_RNASEQ)
     )
+    #print train_sample_dirs
+    #assert False
     copy_chipseq_data(
         sample_dirs=train_sample_dirs,
         idr_peaks_output_dir=CHIPSEQ_IDR_PEAKS_DIR,
         relaxed_peaks_output_dir=CHIPSEQ_RELAXED_PEAKS_DIR,
         fold_change_output_dir=CHIPSEQ_FOLD_CHANGE_DIR,
-        regions_bed_fname="/mnt/data/TF_binding/DREAM_challenge/public_data/annotations/train_regions.blacklisted.merged.bed"
+        regions_bed_fname="/mnt/data/TF_binding/DREAM_challenge/public_data/annotations/train_regions.blacklistfiltered.merged.bed"
     )
     pass
 
@@ -311,7 +318,7 @@ def build_labels(overwrite_existing=False):
     return
 
 def build_labels_tsvs():
-    regions="/mnt/data/TF_binding/DREAM_challenge/public_data/annotations/train_regions.blacklisted.bed.gz"
+    regions="/mnt/data/TF_binding/DREAM_challenge/public_data/annotations/train_regions.blacklistfiltered.bed.gz"
     labels_dir = "/mnt/data/TF_binding/DREAM_challenge/public_data/chipseq/labels/arrays"
     output_dir = "/mnt/data/TF_binding/DREAM_challenge/public_data/chipseq/labels/tsvs"
     sample_grpd_labels = defaultdict(list)

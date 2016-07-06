@@ -93,7 +93,8 @@ def load_dnase_filtered_regions():
         dnase_regions_bed, wa=True)
     dnase_filtered_regions_bed.saveas(cached_fname)
     return dnase_filtered_regions_bed
-    
+
+
 def main():
     # find the regions that overlap DNASE peaks in any cell type
     dnase_filtered_regions_bed = load_dnase_filtered_regions()

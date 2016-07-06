@@ -20,16 +20,16 @@ def build_label_array_from_bed(labels_bed):
     return numpy.asarray(ptr_labels)
 
 @cython.boundscheck(False)
-def load_labels(fp, max_num_lines):
+def load_labels(fname, max_num_lines):
     cdef int num_factors, i, j, start, stop, num_lines
     cdef char ch
     
     # load the header, and find the number of factors
-    fp.seek(0)
-    header_data = next(iter(fp)).split()
-    if header_data[:3] != ['chr', 'start', 'stop']:
-        raise ValueError, "Unexpected header"
-    num_factors = len(header_data) - 3
+    with open(fname) as fp:
+        header_data = next(iter(fp)).split()
+        if header_data[:3] != ['chr', 'start', 'stop']:
+            raise ValueError, "Unexpected header"
+        num_factors = len(header_data) - 3
     
     # find the number of lines
     ptr_fr = fopen(fp.name, "rb")
@@ -40,6 +40,9 @@ def load_labels(fp, max_num_lines):
         if ch == <char>'\n':
             num_lines += 1
 
+    print num_lines
+    print num_factors
+    return
     ptr_fr = fopen(fp.name, "rb")
     i = 0
     cdef int[::1] ptr_labels = numpy.empty((num_lines*num_factors,), dtype='int32')
