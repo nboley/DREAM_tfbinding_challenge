@@ -138,11 +138,11 @@ def upload_rnaseq_data():
 def upload_essential_data_tar():
     folder_id = "syn6112317"
     fnames = [
-        "/mnt/data/TF_binding/DREAM_challenge/public_data/training_data.annotations.tar",
-        "/mnt/data/TF_binding/DREAM_challenge/public_data/training_data.ChIPseq.tar",
+        #"/mnt/data/TF_binding/DREAM_challenge/public_data/training_data.annotations.tar",
+        #"/mnt/data/TF_binding/DREAM_challenge/public_data/training_data.ChIPseq.tar",
         #"/mnt/data/TF_binding/DREAM_challenge/public_data/training_data.DNASE_bams.tar",
         "/mnt/data/TF_binding/DREAM_challenge/public_data/training_data.DNASE_wo_bams.tar",
-        "/mnt/data/TF_binding/DREAM_challenge/public_data/training_data.RNAseq.tar"
+        #"/mnt/data/TF_binding/DREAM_challenge/public_data/training_data.RNAseq.tar"
     ]
     parent = syn.get(folder_id)
     for fname in fnames:
