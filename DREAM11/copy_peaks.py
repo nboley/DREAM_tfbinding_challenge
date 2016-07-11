@@ -182,21 +182,19 @@ def copy_public_chipseq_data():
     )
     pass
 
-def copy_private_chipseq_data():
+def copy_ladderboard_chipseq_data():
     metadata = load_metadata()
     test_sample_dirs = set(
         x.SAMPLE_NAME for x in metadata
-        if (x.SAMPLE_NAME != ''
-            and not x.TODO
-            and x.HIDDEN_TEST_SET
-            and not x.LOWEST_QUALITY_REPLICATE
-            and not x.MISSING_RNASEQ)
+        if x.LADDER_BOARD_SET is True
     )
     copy_chipseq_data(
         sample_dirs=test_sample_dirs,
-        idr_peaks_output_dir="/mnt/data/TF_binding/DREAM_challenge/private_data/chipseq/peaks/idr/",
-        relaxed_peaks_output_dir="/mnt/data/TF_binding/DREAM_challenge/private_data/chipseq/peaks/naive_overlap/",
-        fold_change_output_dir="/mnt/data/TF_binding/DREAM_challenge/private_data/chipseq/fold_change_signal/"
+        idr_peaks_output_dir="/mnt/data/TF_binding/DREAM_challenge/ladderboard_chipseq_data/idr/",
+        relaxed_peaks_output_dir="/mnt/data/TF_binding/DREAM_challenge/ladderboard_chipseq_data/relaxed/",
+        fold_change_output_dir="/mnt/data/TF_binding/DREAM_challenge/ladderboard_chipseq_data/fold_change_signal/",
+        regions_bed_fname="/mnt/data/TF_binding/DREAM_challenge/public_data/annotations/ladder_regions.blacklistfiltered.bed.gz"
+
     )
     return
 
@@ -293,34 +291,29 @@ def build_labels_for_sample_and_factor(
     np.save(ofname, labels)
     return
 
-def build_labels(overwrite_existing=False):
+def build_labels(regions_fname, idr_peaks_dir, relaxed_peaks_dir, output_dir, overwrite_existing=False):
     matched_peaks = defaultdict(lambda: {'idr': None, 'relaxed': None})
-    for fname in os.listdir(CHIPSEQ_IDR_PEAKS_DIR):
+    for fname in os.listdir(idr_peaks_dir):
         sample, factor = fname.split(".")[1:3]
         assert matched_peaks[(sample, factor)]['idr'] is None
         matched_peaks[(sample, factor)]['idr'] = os.path.join(
-            CHIPSEQ_IDR_PEAKS_DIR, fname)
+            idr_peaks_dir, fname)
 
-    for fname in os.listdir(CHIPSEQ_RELAXED_PEAKS_DIR):
+    for fname in os.listdir(relaxed_peaks_dir):
         sample, factor = fname.split(".")[1:3]
         assert matched_peaks[(sample, factor)]['idr'] is not None
         assert matched_peaks[(sample, factor)]['relaxed'] is None
         matched_peaks[(sample, factor)]['relaxed'] = os.path.join(
-            CHIPSEQ_RELAXED_PEAKS_DIR, fname)
+            relaxed_peaks_dir, fname)
 
     all_args = []
-    output_dir = \
-        "/mnt/data/TF_binding/DREAM_challenge/public_data/chipseq/labels/arrays/"
     for (sample, factor), fnames in matched_peaks.iteritems():
         all_args.append(
-            (TRAIN_REGIONS_BED, fnames['idr'], fnames['relaxed'], output_dir))
+            (regions_fname, fnames['idr'], fnames['relaxed'], output_dir))
     run_in_parallel(16, build_labels_for_sample_and_factor, all_args)
     return
 
-def build_labels_tsvs():
-    regions="/mnt/data/TF_binding/DREAM_challenge/public_data/annotations/train_regions.blacklistfiltered.bed.gz"
-    labels_dir = "/mnt/data/TF_binding/DREAM_challenge/public_data/chipseq/labels/arrays"
-    output_dir = "/mnt/data/TF_binding/DREAM_challenge/public_data/chipseq/labels/tsvs"
+def build_labels_tsvs(regions, labels_dir, output_dir):
     sample_grpd_labels = defaultdict(list)
     for fname in os.listdir(labels_dir):
         if not fname.endswith(".npy"): continue
@@ -329,7 +322,7 @@ def build_labels_tsvs():
         sample_grpd_labels[os.path.join(output_dir, ofname)].append(
             (sample, os.path.join(labels_dir, fname)))
 
-    args = [x + [regions,] for x in sample_grpd_labels.iteritems()]
+    args = [list(x) + [regions,] for x in sample_grpd_labels.iteritems()]
     run_in_parallel(16, build_labels_tsv, args)
     return
 
@@ -338,8 +331,29 @@ def main():
     #copy_private_chipseq_data()
     #copy_public_chipseq_data()
     #copy_DNASE_files()
-    #build_labels()
-    #build_labels_tsvs()
-    
+    #build_labels(
+    #   CHIPSEQ_IDR_PEAKS_DIR,
+    #   CHIPSEQ_RELAXED_PEAKS_DIR,
+    #   "/mnt/data/TF_binding/DREAM_challenge/public_data/chipseq/labels/arrays/"
+    #)
+    #build_labels_tsvs(
+    #   TRAIN_REGIONS_BED,
+    #   "/mnt/data/TF_binding/DREAM_challenge/public_data/annotations/train_regions.blacklistfiltered.bed.gz",
+    #   "/mnt/data/TF_binding/DREAM_challenge/public_data/chipseq/labels/arrays",
+    #   "/mnt/data/TF_binding/DREAM_challenge/public_data/chipseq/labels/tsvs",
+    #)
+    #copy_ladderboard_chipseq_data()
+    #build_labels(
+    #    "/mnt/data/TF_binding/DREAM_challenge/public_data/annotations/ladder_regions.blacklistfiltered.bed.gz",
+    #    "/mnt/data/TF_binding/DREAM_challenge/ladderboard_chipseq_data/idr/",
+    #    "/mnt/data/TF_binding/DREAM_challenge/ladderboard_chipseq_data/relaxed/",
+    #    "/mnt/data/TF_binding/DREAM_challenge/ladderboard_chipseq_data/arrays/"
+    #)
+    build_labels_tsvs(
+        "/mnt/data/TF_binding/DREAM_challenge/public_data/annotations/ladder_regions.blacklistfiltered.bed.gz",
+        "/mnt/data/TF_binding/DREAM_challenge/ladderboard_chipseq_data/arrays/",
+        "/mnt/data/TF_binding/DREAM_challenge/ladderboard_chipseq_data/tsvs/"
+    )
+
 if __name__ == '__main__':
     main()
