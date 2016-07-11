@@ -349,11 +349,12 @@ def main():
     #    "/mnt/data/TF_binding/DREAM_challenge/ladderboard_chipseq_data/relaxed/",
     #    "/mnt/data/TF_binding/DREAM_challenge/ladderboard_chipseq_data/arrays/"
     #)
-    build_labels_tsvs(
-        "/mnt/data/TF_binding/DREAM_challenge/public_data/annotations/ladder_regions.blacklistfiltered.bed.gz",
-        "/mnt/data/TF_binding/DREAM_challenge/ladderboard_chipseq_data/arrays/",
-        "/mnt/data/TF_binding/DREAM_challenge/ladderboard_chipseq_data/tsvs/"
-    )
+    #build_labels_tsvs(
+    #    "/mnt/data/TF_binding/DREAM_challenge/public_data/annotations/ladder_regions.blacklistfiltered.bed.gz",
+    #    "/mnt/data/TF_binding/DREAM_challenge/ladderboard_chipseq_data/arrays/",
+    #    "/mnt/data/TF_binding/DREAM_challenge/ladderboard_chipseq_data/tsvs/"
+    #)
+    pass
 
 if __name__ == '__main__':
     main()

@@ -225,7 +225,7 @@ def load_dnase_filtered_regions(regions_fname):
     dnase_filtered_regions_bed.saveas(cached_fname)
     return dnase_filtered_regions_bed
 
-def main():
+def generate_label_data():
     data = LabelData(
         sys.argv[1], regions_fname=load_DNASE_regions_bed().fn)
     try:
@@ -233,6 +233,9 @@ def main():
     except NoBindingModelsFoundError, inst:
         print inst
     return
+
+def main():
+    pass
 
 if __name__ == '__main__':
     main()

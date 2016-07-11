@@ -20,6 +20,28 @@ def build_label_array_from_bed(labels_bed):
     return numpy.asarray(ptr_labels)
 
 @cython.boundscheck(False)
+def cmp_labels(truth_bed_fname, submitted_bed_fname):
+    """Returns true if the labels are identical in truth_bed_fname and submitted_bed_fname
+
+    """
+    cdef int truth_scanf_rv, submitted_scanf_rv
+    cdef int truth_start, truth_stop
+    cdef int submitted_start, submitted_stop
+    cdef int truth_num_lines, submitted_num_lines
+    cdef char[256] submitted_contig
+    cdef char[256] truth_contig
+    
+    i = 0
+    truth_fp = fopen(truth_bed_fname, "rb")
+    submitted_fp = fopen(submitted_bed_fname, "rb")
+    ptr_fr = fopen(fname, "rb")
+    while True:
+        fscanf(ptr_fr,"%s\t%i\t%i\n", &start, &stop, &ptr_labels[i])
+        #print start, stop, ptr_labels[i]
+        i += 1
+    return numpy.asarray(ptr_labels)
+
+@cython.boundscheck(False)
 def load_labels(fname, max_num_lines):
     cdef int num_factors, i, j, start, stop, num_lines
     cdef char ch
