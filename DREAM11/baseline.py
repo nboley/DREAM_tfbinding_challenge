@@ -73,11 +73,11 @@ class LabelData(object):
 
     def __hash__(self):
         if self._hash is None:
-            self._hash = abs(hash((
+            self._hash = abs(hash(hashlib.md5(str((
                 md5(self.labels_fname),
                 None if self.regions_fname is None else md5(self.regions_fname),
                 self.max_n_rows
-            )))
+            ))).hexdigest()))
         return self._hash
 
     @property
@@ -96,6 +96,7 @@ class LabelData(object):
             p2 = Popen(["tail", "-n", "+2",], stdout=PIPE, stdin=p1.stdout)
             # check to see if we should limit the numbere of input rows
             p4_input = None
+            # if we want to limit the number of rows, then add a call to head
             if self.max_n_rows is not None:
                 p3 = Popen(
                     ["head", "-n", str(self.max_n_rows),], stdout=PIPE, stdin=p2.stdout)
@@ -235,7 +236,7 @@ def generate_label_data():
     return
 
 def main():
-    pass
+    generate_label_data()
 
 if __name__ == '__main__':
     main()
