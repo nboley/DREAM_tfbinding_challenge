@@ -225,7 +225,7 @@ def iter_block_samples(labels, scores, num_splits=10):
 def empirical_p_value(score, other_scores):
     other_scores.sort()
     rank = bisect(other_scores, score)
-    return max(0.5, float(rank)/(len(other_scores)+1))
+    return min(0.5, float(rank)/(len(other_scores)+1))
 
 def calc_score_improved_pvalue(labels, scores, previous_scores):
     # bootstrap the validation scores
