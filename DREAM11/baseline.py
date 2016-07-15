@@ -4,8 +4,10 @@ import gzip
 import tempfile
 import hashlib
 from subprocess import Popen, PIPE
+from collections import namedtuple
 
 import numpy as np
+from scipy.stats import itemfreq
 from scipy.stats.mstats import mquantiles
 
 import h5py
@@ -14,9 +16,16 @@ import pybedtools
 
 import pysam
 import pandas as pd
+
+from bw import BigWig
+
+from pyTFbindtools.cross_validation import ClassificationResult
+
 from pyDNAbinding.binding_model import DNASequence, PWMBindingModel
 from pyDNAbinding.DB import (
     load_binding_models_from_db, NoBindingModelsFoundError, load_all_pwms_from_db)
+
+GenomicRegion = namedtuple('GenomicRegion', ['contig', 'start', 'stop'])
 
 def load_TAF1_binding_model():
     with open("TAF1_motif.txt") as fp:
@@ -47,17 +56,35 @@ class LabelData(object):
         return len(self.data)
     
     @property
-    def factors(self):
+    def samples(self):
         return self.data.columns[3:].values
 
+    def build_integer_labels(self):
+        print itemfreq(self.data.ix[:,3])
+        print itemfreq(self.data.ix[:,3] == 'A')
+        print (self.data.ix[:,3] == 'A').dtype
+        print itemfreq(self.data.ix[:,3])
+        labels = np.zeros(self.data.ix[:,3].shape, dtype=int)
+        print 
+        labels[self.data.ix[:,3] == 'A'] = -1
+        labels[self.data.ix[:,3] == 'B'] = 1
+        print itemfreq(labels)
+        return labels
+
+    def iter_regions(self, flank_size=0):
+        for contig, start, stop in izip(
+                self.data['chr'],
+                self.data['start']-flank_size,
+                self.data['stop']+flank_size):
+            yield GenomicRegion(contig, start, stop)
+        return
+    
     def iter_seqs(self, fasta_fname):
         genome = pysam.FastaFile(fasta_fname)
         return (
             genome.fetch(contig, start, stop+1).upper()
             for contig, start, stop
-            in izip(self.data['chr'],
-                    self.data['start']-400,
-                    self.data['stop']+400)
+            in self.iter_regions(flank_size=400)
         )
 
     def _init_header_data(self, labels_fname):
@@ -68,7 +95,6 @@ class LabelData(object):
             raise ValueError(
                 "Unrecognized header line: '%s'" % header_line.strip())
         self.header = header_data
-        self.samples = header_data[3:]
         return
 
     def __hash__(self):
@@ -142,7 +168,7 @@ class LabelData(object):
         # extract the factor from the filename
         self.factor = os.path.basename(labels_fname).split('.')[0]
 
-        # if we want to use a chaced version...
+        # if we want to use a cached version...
         if self.load_cached is True:
             try:
                 self.h5store = h5py.File(self.cached_fname)
@@ -156,8 +182,9 @@ class LabelData(object):
         
         return
     
-    def score_regions(self, fasta_fname):
-        all_agg_scores = []
+    def build_motif_scores(self, fasta_fname):
+        all_agg_scores = np.zeros(
+            (len(self), len(aggregate_region_scores_labels)), dtype=float)
         try:
             models = load_binding_models_from_db(tf_names=[self.factor,])
             assert len(models) == 1, "Multiple binding models found for '{}'".format(self.factor)
@@ -171,23 +198,51 @@ class LabelData(object):
         model = models[0]
         for i, seq in enumerate(self.iter_seqs(fasta_fname)):
             if i%10000 == 0: print >> sys.stderr, i, len(self)
-            all_agg_scores.append(
-                aggregate_region_scores(
-                    DNASequence(seq).score_binding_sites(model, 'MAX')
-                )
-            )
+            all_agg_scores[i,:] = aggregate_region_scores(
+                DNASequence(seq).score_binding_sites(model, 'MAX')
+            )        
         all_agg_scores = pd.DataFrame(
-            dict(zip(aggregate_region_scores_labels, all_agg_scores)))
+            all_agg_scores, columns=aggregate_region_scores_labels)
         return all_agg_scores
 
-    def load_or_build_region_scores(self, fasta_fname):
+    def load_or_build_motif_scores(self, fasta_fname):
         try:
-            self.scores = pd.read_hdf(self.cached_fname, 'scores')
+            raise KeyError("TMP")
+            self.motif_scores = pd.read_hdf(self.cached_fname, 'motif_scores')
         except KeyError:
-            self.scores = self.score_regions(fasta_fname)
-            self.scores.to_hdf(self.cached_fname, 'scores')
-        return self.scores
+            self.motif_scores = self.build_motif_scores(fasta_fname)
+            self.motif_scores.to_hdf(self.cached_fname, 'motif_scores')
+        return self.motif_scores
 
+    def build_dnase_fc_scores(self):
+        path="/mnt/data/TF_binding/DREAM_challenge/public_data/DNASE/fold_coverage_wiggles/"
+        scores = np.zeros((len(self), len(self.samples)), dtype=float)
+        for sample_i, sample_name in enumerate(self.samples):
+            fname = "DNASE.{}.fc.signal.bigwig".format(sample_name)
+            b = BigWig(os.path.join(path, fname))
+            for region_i, region in enumerate(self.iter_regions()):
+                if region_i%1000000 == 0:
+                    print "Sample %i/%i, row %i/%i" % (
+                        sample_i+1, len(self.samples), region_i, len(self))
+                scores[region_i, sample_i] = b.stats(
+                    region.contig, region.start, region.stop, 'max')
+            b.close()
+        return pd.DataFrame(np.nan_to_num(scores), columns=self.samples)
+    
+    def load_or_build_dnase_fc_scores(self):
+        try:
+            self.dnase_fc_scores = pd.read_hdf(self.cached_fname, 'dnase_scores')
+        except KeyError:
+            self.dnase_fc_scores = self.build_dnase_fc_scores()
+            self.dnase_fc_scores.to_hdf(self.cached_fname, 'dnase_scores')
+        return self.dnase_fc_scores
+
+    def dataframe(self, fasta_fname):
+        return pd.concat(
+            [self.load_or_build_dnase_fc_scores(),
+             self.load_or_build_motif_scores(fasta_fname)],
+            axis=1)
+    
 def load_DNASE_regions_bed():
     try:
         return pybedtools.BedTool("merged_regions.relaxed.bed")
@@ -214,7 +269,8 @@ def load_dnase_filtered_regions(regions_fname):
     assert False
     # try to load a cached version of this file, and create it
     # if we can't find one
-    cached_fname = os.path.basename(regions_fname) + ".relaxed_dnase_filtered_cache"
+    cached_fname = os.path.basename(regions_fname) + \
+                   ".relaxed_dnase_filtered_cache"
     try:
         return pybedtools.BedTool(cached_fname)
     except ValueError:
@@ -226,17 +282,36 @@ def load_dnase_filtered_regions(regions_fname):
     dnase_filtered_regions_bed.saveas(cached_fname)
     return dnase_filtered_regions_bed
 
+
+def train_model():
+    train_data = LabelData(
+        sys.argv[1], regions_fname=load_DNASE_regions_bed().fn) #, max_n_rows=1000000)
+    motif_scores = train_data.load_or_build_motif_scores(sys.argv[2])
+    labels = train_data.build_integer_labels()
+    df = train_data.dataframe(sys.argv[2]).ix[labels > -0.5,:]
+    return
+    print itemfreq(labels)
+    labels = labels[labels > -0.5]
+    print itemfreq(labels)
+    from sklearn.ensemble import GradientBoostingClassifier
+    from sklearn.cross_validation import KFold
+    for train_i, test_i in KFold(len(labels), n_folds=5, shuffle=False):
+        train_df = df.ix[train_i,:]
+        train_labels = labels[train_i]
+        mo = GradientBoostingClassifier()
+        mo.fit(train_df, train_labels)
+        pred = mo.predict(df.ix[test_i,:])
+        pred_proba = mo.predict_proba(df.ix[test_i,:])
+        print ClassificationResult(labels[test_i], pred, pred_proba)
+        #print mo
+
 def generate_label_data():
-    data = LabelData(
-        sys.argv[1], regions_fname=load_DNASE_regions_bed().fn)
-    try:
-        scores = data.load_or_build_region_scores(sys.argv[2])
-    except NoBindingModelsFoundError, inst:
-        print inst
+    
     return
 
 def main():
-    generate_label_data()
-
+    #generate_label_data()
+    train_model()
+    
 if __name__ == '__main__':
     main()
