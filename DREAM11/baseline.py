@@ -59,18 +59,24 @@ class LabelData(object):
     def samples(self):
         return self.data.columns[3:].values
 
-    def build_integer_labels(self):
-        print itemfreq(self.data.ix[:,3])
-        print itemfreq(self.data.ix[:,3] == 'A')
-        print (self.data.ix[:,3] == 'A').dtype
-        print itemfreq(self.data.ix[:,3])
-        labels = np.zeros(self.data.ix[:,3].shape, dtype=int)
-        print 
-        labels[self.data.ix[:,3] == 'A'] = -1
-        labels[self.data.ix[:,3] == 'B'] = 1
-        print itemfreq(labels)
+    def build_integer_labels(self, label_index):
+        labels = np.zeros(self.data.ix[:,3+label_index].shape, dtype=int)
+        labels[np.array(self.data.ix[:,3+label_index] == 'A', dtype=bool)] = -1
+        labels[np.array(self.data.ix[:,3+label_index] == 'B', dtype=bool)] = 1
         return labels
 
+    def build_train_array(self, normalize=True):
+        """Unstack the data frame accessibility score and labels.
+
+        """
+        accessibility_score_start_index = 3
+        predictors = []
+        for i in xrange(accessibility_score_start_index,
+                        accessibility_score_start_index+len(self.samples)):
+            predictors.append(self.dataframe.ix[:,(0,1,2,i)])
+            
+        pass
+    
     def iter_regions(self, flank_size=0):
         for contig, start, stop in izip(
                 self.data['chr'],
@@ -207,7 +213,6 @@ class LabelData(object):
 
     def load_or_build_motif_scores(self, fasta_fname):
         try:
-            raise KeyError("TMP")
             self.motif_scores = pd.read_hdf(self.cached_fname, 'motif_scores')
         except KeyError:
             self.motif_scores = self.build_motif_scores(fasta_fname)
@@ -237,11 +242,26 @@ class LabelData(object):
             self.dnase_fc_scores.to_hdf(self.cached_fname, 'dnase_scores')
         return self.dnase_fc_scores
 
-    def dataframe(self, fasta_fname):
-        return pd.concat(
-            [self.load_or_build_dnase_fc_scores(),
-             self.load_or_build_motif_scores(fasta_fname)],
-            axis=1)
+    def dataframe(self, fasta_fname, normalize=True):
+        # load and normalzie the motif and DNASE scores
+        motif_scores = self.load_or_build_motif_scores(fasta_fname)
+        if normalize:
+            motif_scores = (motif_scores - motif_scores.mean())/motif_scores.std()
+        dnase_scores = self.load_or_build_dnase_fc_scores()
+        if normalize:
+            dnase_scores = (dnase_scores - dnase_scores.mean())/dnase_scores.std()
+
+        # concat the DNASE scores into a single column, and repeat the motif
+        # scores so that each DNASE entry has a single motif score entry
+        motif_scores = pd.concat(
+            [motif_scores]*len(dnase_scores.columns), axis=0, ignore_index=True)
+        dnase_scores = pd.concat([
+            dnase_scores[column] for column in dnase_scores.columns
+        ], axis=0, ignore_index=True)
+        # concat the dnase scores and motif scores, and then rename the columns
+        rv = pd.concat([motif_scores, dnase_scores], axis=1)
+        rv.columns = list(motif_scores.columns) + ['dnase_score',]
+        return rv
     
 def load_DNASE_regions_bed():
     try:
@@ -284,29 +304,62 @@ def load_dnase_filtered_regions(regions_fname):
 
 
 def train_model():
+    fasta_fname = sys.argv[2]
     train_data = LabelData(
         sys.argv[1], regions_fname=load_DNASE_regions_bed().fn) #, max_n_rows=1000000)
-    motif_scores = train_data.load_or_build_motif_scores(sys.argv[2])
-    labels = train_data.build_integer_labels()
-    df = train_data.dataframe(sys.argv[2]).ix[labels > -0.5,:]
-    return
-    print itemfreq(labels)
-    labels = labels[labels > -0.5]
-    print itemfreq(labels)
-    from sklearn.ensemble import GradientBoostingClassifier
-    from sklearn.cross_validation import KFold
-    for train_i, test_i in KFold(len(labels), n_folds=5, shuffle=False):
-        train_df = df.ix[train_i,:]
-        train_labels = labels[train_i]
-        mo = GradientBoostingClassifier()
-        mo.fit(train_df, train_labels)
-        pred = mo.predict(df.ix[test_i,:])
-        pred_proba = mo.predict_proba(df.ix[test_i,:])
-        print ClassificationResult(labels[test_i], pred, pred_proba)
-        #print mo
 
-def generate_label_data():
+    labels = []
+    for sample_index, sample_name in enumerate(train_data.samples):
+        labels.append(train_data.build_integer_labels(sample_index))
+    labels = np.concatenate(labels, axis=0)
     
+    df = train_data.dataframe(fasta_fname)
+    
+    # filter out ambiguous labels
+    df = df.ix[labels > -0.5]
+    labels = labels[labels > -0.5]    
+    print itemfreq(labels)
+
+    from sklearn.ensemble import GradientBoostingClassifier, RandomForestClassifier
+    from sklearn.linear_model import LogisticRegression, SGDClassifier
+    #from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
+    from sklearn.cross_validation import KFold
+    for train_i, test_i in KFold(labels.shape[0], n_folds=5, shuffle=False):
+        train_df = np.nan_to_num(df.ix[train_i,:])
+        train_labels = labels[train_i]
+        test_df = np.nan_to_num(df.ix[test_i,:])
+        test_labels = labels[test_i]
+        if False:
+            ones_labels = np.nonzero(train_labels == 1)[0]
+            zeros_labels = np.nonzero(train_labels == 0)[0]
+            # subsample the zero labels to be balanced
+            balanced_zero_labels = np.random.choice(
+                zeros_labels.ravel(), len(ones_labels), replace=False)
+            balanced_indices = np.concatenate(
+                [balanced_zero_labels, ones_labels], axis=0)
+            train_df = train_df[balanced_indices,:]
+            train_labels = train_labels[balanced_indices]
+            print itemfreq(train_labels)
+
+        
+        #mo = RandomForestClassifier(16, n_jobs=16)
+        #mo = GradientBoostingClassifier(
+        #    max_depth=6, n_estimators=100) #, learning_rate=1.0)
+        #mo = LogisticRegression()
+        mo = SGDClassifier(
+            loss='log', class_weight='balanced', n_jobs=16)
+        mo.fit(train_df, train_labels)
+
+        pred = mo.predict(train_df)
+        pred_proba = mo.predict_proba(train_df)[:,1]
+        print ClassificationResult(train_labels, pred, pred_proba)
+
+        pred = mo.predict(test_df)
+        pred_proba = mo.predict_proba(test_df)[:,1]
+        print ClassificationResult(labels[test_i], pred, pred_proba)
+        print
+
+def generate_label_data():    
     return
 
 def main():
