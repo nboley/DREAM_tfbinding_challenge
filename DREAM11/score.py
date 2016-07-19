@@ -299,7 +299,7 @@ def build_test_data():
 
     return other_participants_results, previous_scores
 
-def main():
+def test_main():
     other_participants_results, previous_scores = build_test_data()
     labels_file = sys.argv[1]
     build_sample_test_file(labels_file, 3, "test.scores")
@@ -307,6 +307,14 @@ def main():
     combined_score, p_val, results = verify_and_score_submission(
         labels_file, submission_file, previous_scores, other_participants_results)
     print combined_score, p_val, results
+
+def main():
+    labels_fname = sys.argv[1]
+    submission_fname = sys.argv[2]
+    labels, scores = verify_file_and_build_scores_array(
+        labels_fname, submission_fname)
+    full_results = ClassificationResult(labels, scores.round(), scores)
+    print full_results
 
 if __name__ == '__main__':
     main()

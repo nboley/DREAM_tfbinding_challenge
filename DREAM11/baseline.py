@@ -57,31 +57,25 @@ class LabelData(object):
     
     @property
     def samples(self):
-        return self.data.columns[3:].values
+        return self.data.columns.values
 
     def build_integer_labels(self, label_index):
-        labels = np.zeros(self.data.ix[:,3+label_index].shape, dtype=int)
-        labels[np.array(self.data.ix[:,3+label_index] == 'A', dtype=bool)] = -1
-        labels[np.array(self.data.ix[:,3+label_index] == 'B', dtype=bool)] = 1
+        labels = np.zeros(self.data.ix[:,label_index].shape, dtype=int)
+        labels[np.array(self.data.ix[:,label_index] == 'A', dtype=bool)] = -1
+        labels[np.array(self.data.ix[:,label_index] == 'B', dtype=bool)] = 1
         return labels
 
     def build_train_array(self, normalize=True):
         """Unstack the data frame accessibility score and labels.
 
         """
-        accessibility_score_start_index = 3
         predictors = []
-        for i in xrange(accessibility_score_start_index,
-                        accessibility_score_start_index+len(self.samples)):
-            predictors.append(self.dataframe.ix[:,(0,1,2,i)])
-            
-        pass
+        for i in xrange(len(self.samples)):
+            predictors.append(self.dataframe.ix[:,i])
+        return
     
     def iter_regions(self, flank_size=0):
-        for contig, start, stop in izip(
-                self.data['chr'],
-                self.data['start']-flank_size,
-                self.data['stop']+flank_size):
+        for contig, start, stop in self.data.index:
             yield GenomicRegion(contig, start, stop)
         return
     
@@ -122,7 +116,8 @@ class LabelData(object):
         if self.regions_fname is not None:
             # load the data into a bed file
             # zcat {fname} | tail -n +2 | head -n 10000 | \
-            #   bedtools intersect -wa -a stdin -b {regions_fname} > {output_fname}
+            #   bedtools intersect -wa -a stdin -b {regions_fname} \
+            # | uniq > {output_fname}
             filtered_regions_fp = tempfile.NamedTemporaryFile("w+")
             p1 = Popen(["zcat", self.labels_fname], stdout=PIPE)
             p2 = Popen(["tail", "-n", "+2",], stdout=PIPE, stdin=p1.stdout)
@@ -141,21 +136,30 @@ class LabelData(object):
                         "-a", "stdin",
                         "-b", self.regions_fname],
                        stdin=p4_input,
-                       stdout=filtered_regions_fp
+                       stdout=PIPE
             )
-            p4.wait()
+            p5 = Popen(["uniq",], stdin=p4.stdout, stdout=filtered_regions_fp)
+            p5.wait()
             # Allow p* to receive a SIGPIPE if p(*-1) exits.
             p1.terminate()  
             p2.terminate()
             if p3 is not None: p3.terminate()
+            p4.terminate()
             # flush the output file cache, and reset the file pointer
             filtered_regions_fp.flush()
             filtered_regions_fp.seek(0)
             return pd.read_table(
-                filtered_regions_fp, nrows=self.max_n_rows, names=self.header)            
+                filtered_regions_fp,
+                index_col=(0,1,2),
+                nrows=self.max_n_rows,
+                names=self.header)
         else:
             return pd.read_table(
-                self.labels_fname, nrows=self.max_n_rows, names=self.header)
+                self.labels_fname,
+                header=0,
+                index_col=(0,1,2),
+                nrows=self.max_n_rows
+            )
     
     def __init__(self,
                  labels_fname,
@@ -169,7 +173,7 @@ class LabelData(object):
         self.load_cached = load_cached
         # extract the sample names from the header
         assert labels_fname.endswith("labels.tsv.gz"), \
-            "Unrecognized labels filename '%s'" % regions_fname
+            "Unrecognized labels filename '%s'" % labels_fname
         self._init_header_data(labels_fname)
         # extract the factor from the filename
         self.factor = os.path.basename(labels_fname).split('.')[0]
@@ -177,6 +181,7 @@ class LabelData(object):
         # if we want to use a cached version...
         if self.load_cached is True:
             try:
+                print "Loading '%s'" % self.cached_fname
                 self.h5store = h5py.File(self.cached_fname)
                 self.data = pd.read_hdf(self.cached_fname, 'data')
             except KeyError:
@@ -230,7 +235,7 @@ class LabelData(object):
                     print "Sample %i/%i, row %i/%i" % (
                         sample_i+1, len(self.samples), region_i, len(self))
                 scores[region_i, sample_i] = b.stats(
-                    region.contig, region.start, region.stop, 'max')
+                    region.contig, region.start, region.stop, 'mean')
             b.close()
         return pd.DataFrame(np.nan_to_num(scores), columns=self.samples)
     
@@ -240,24 +245,30 @@ class LabelData(object):
         except KeyError:
             self.dnase_fc_scores = self.build_dnase_fc_scores()
             self.dnase_fc_scores.to_hdf(self.cached_fname, 'dnase_scores')
+        except IOError:
+            self.dnase_fc_scores = self.build_dnase_fc_scores()            
         return self.dnase_fc_scores
 
+    def dnase_dataframe(self, normalize=True):
+        dnase_scores = self.load_or_build_dnase_fc_scores()
+        if normalize:
+            dnase_scores = (dnase_scores - dnase_scores.mean())/dnase_scores.std()
+        dnase_scores = pd.concat([
+            dnase_scores[column] for column in dnase_scores.columns
+        ], axis=0, ignore_index=True)
+        dnase_scores.columns = ['dnase_score',]
+        return dnase_scores
+    
     def dataframe(self, fasta_fname, normalize=True):
         # load and normalzie the motif and DNASE scores
         motif_scores = self.load_or_build_motif_scores(fasta_fname)
         if normalize:
             motif_scores = (motif_scores - motif_scores.mean())/motif_scores.std()
-        dnase_scores = self.load_or_build_dnase_fc_scores()
-        if normalize:
-            dnase_scores = (dnase_scores - dnase_scores.mean())/dnase_scores.std()
 
         # concat the DNASE scores into a single column, and repeat the motif
         # scores so that each DNASE entry has a single motif score entry
         motif_scores = pd.concat(
             [motif_scores]*len(dnase_scores.columns), axis=0, ignore_index=True)
-        dnase_scores = pd.concat([
-            dnase_scores[column] for column in dnase_scores.columns
-        ], axis=0, ignore_index=True)
         # concat the dnase scores and motif scores, and then rename the columns
         rv = pd.concat([motif_scores, dnase_scores], axis=1)
         rv.columns = list(motif_scores.columns) + ['dnase_score',]
@@ -359,12 +370,43 @@ def train_model():
         print ClassificationResult(labels[test_i], pred, pred_proba)
         print
 
-def generate_label_data():    
-    return
+def easiest_model():
+    """Build a debugging model using CTCF.
+    
+    """
+    labels_fname = "CTCF.train.chr10.labels.tsv.gz"
+    all_data = LabelData(labels_fname)
+    for sample_i, sample in enumerate(all_data.samples):
+        dnase_peaks_fname = "DNASE.%s.conservative.chr10.narrowPeak.gz" % sample
+        dnase_dataframe = all_data.load_or_build_dnase_fc_scores()
+        motif_scores = all_data.load_or_build_motif_scores('hg19.genome.fa') 
+        return
+        data = LabelData(labels_fname)
+        
+        actual_labels = data.build_integer_labels(0)
+        predicted_labels = np.ones(actual_labels.shape, dtype=int)
+        result = pd.DataFrame({'prb': predicted_prbs}, index=data.data.index)
+
+        test_labels = pd.read_table(labels_fname, index_col=(0,1,2))
+
+        prbs_and_labels = pd.concat([result, test_labels], axis=1)['prb']
+        prbs_and_labels.fillna(0.0, inplace=True)
+        prbs_and_labels.to_csv('test.bed', sep="\t", header=False)
+
+        from score import verify_file_and_build_scores_array, ClassificationResult
+        labels, scores = verify_file_and_build_scores_array(
+            labels_fname, "test.bed")
+        full_results = ClassificationResult(labels, scores.round(), scores)
+        print full_results
+        return
+
+    prbs_and_labels.to_csv('test.bed', sep="\t", header=False)
+
 
 def main():
     #generate_label_data()
-    train_model()
+    #train_model()
+    easiest_model()
     
 if __name__ == '__main__':
     main()
