@@ -172,8 +172,8 @@ class LabelData(object):
         self._hash = None
         self.load_cached = load_cached
         # extract the sample names from the header
-        assert labels_fname.endswith("labels.tsv.gz"), \
-            "Unrecognized labels filename '%s'" % labels_fname
+        #assert labels_fname.endswith("labels.tsv.gz"), \
+        #    "Unrecognized labels filename '%s'" % labels_fname
         self._init_header_data(labels_fname)
         # extract the factor from the filename
         self.factor = os.path.basename(labels_fname).split('.')[0]
@@ -208,17 +208,20 @@ class LabelData(object):
                 models = load_all_pwms_from_db(tf_names=self.factor)
         model = models[0]
         for i, seq in enumerate(self.iter_seqs(fasta_fname)):
-            if i%10000 == 0: print >> sys.stderr, i, len(self)
+            if i%1000000 == 0: print >> sys.stderr, i, len(self)
             all_agg_scores[i,:] = aggregate_region_scores(
                 DNASequence(seq).score_binding_sites(model, 'MAX')
             )        
         all_agg_scores = pd.DataFrame(
-            all_agg_scores, columns=aggregate_region_scores_labels)
+            all_agg_scores,
+            index=self.data.index,
+            columns=aggregate_region_scores_labels)
         return all_agg_scores
 
     def load_or_build_motif_scores(self, fasta_fname):
         try:
             self.motif_scores = pd.read_hdf(self.cached_fname, 'motif_scores')
+            self.motif_scores.index = self.data.index
         except KeyError:
             self.motif_scores = self.build_motif_scores(fasta_fname)
             self.motif_scores.to_hdf(self.cached_fname, 'motif_scores')
@@ -237,7 +240,8 @@ class LabelData(object):
                 scores[region_i, sample_i] = b.stats(
                     region.contig, region.start, region.stop, 'mean')
             b.close()
-        return pd.DataFrame(np.nan_to_num(scores), columns=self.samples)
+        return pd.DataFrame(
+            np.nan_to_num(scores), columns=self.samples, index=self.data.index)
     
     def load_or_build_dnase_fc_scores(self):
         try:
@@ -258,7 +262,7 @@ class LabelData(object):
         ], axis=0, ignore_index=True)
         dnase_scores.columns = ['dnase_score',]
         return dnase_scores
-    
+        
     def dataframe(self, fasta_fname, normalize=True):
         # load and normalzie the motif and DNASE scores
         motif_scores = self.load_or_build_motif_scores(fasta_fname)
@@ -370,43 +374,87 @@ def train_model():
         print ClassificationResult(labels[test_i], pred, pred_proba)
         print
 
-def easiest_model():
+def easiest_model(factor):
     """Build a debugging model using CTCF.
     
     """
-    labels_fname = "CTCF.train.chr10.labels.tsv.gz"
+    labels_fname = "/mnt/data/TF_binding/DREAM_challenge/public_data/chipseq/labels/tsvs/{}.train.labels.tsv.gz".format(factor)
     all_data = LabelData(labels_fname)
+    sample_labels = []
+    subset_train_data = []
+    subset_train_labels = []
     for sample_i, sample in enumerate(all_data.samples):
-        dnase_peaks_fname = "DNASE.%s.conservative.chr10.narrowPeak.gz" % sample
-        dnase_dataframe = all_data.load_or_build_dnase_fc_scores()
-        motif_scores = all_data.load_or_build_motif_scores('hg19.genome.fa') 
-        return
-        data = LabelData(labels_fname)
-        
-        actual_labels = data.build_integer_labels(0)
-        predicted_labels = np.ones(actual_labels.shape, dtype=int)
-        result = pd.DataFrame({'prb': predicted_prbs}, index=data.data.index)
+        #if sample_i > 1: break
+        print sample_i, sample
+        sample_labels.append(sample)
+        dnase_peaks_fname = \
+            "/mnt/data/TF_binding/DREAM_challenge/public_data/DNASE/peaks/idr/DNASE.%s.conservative.narrowPeak.gz" % sample
+        sample_data = LabelData(labels_fname, dnase_peaks_fname)
+        dnase_scores = sample_data.load_or_build_dnase_fc_scores()[[sample,]]
+        dnase_scores.columns = ['dnase_fc',]
+        motif_scores = all_data.load_or_build_motif_scores('hg19.genome.fa')
+        sample_train_df = dnase_scores.join(motif_scores)
+        subset_train_data.append(sample_train_df)
+        sample_train_labels = sample_data.build_integer_labels(sample_i)
+        subset_train_labels.append(sample_train_labels)
 
-        test_labels = pd.read_table(labels_fname, index_col=(0,1,2))
+    print "Building the training data sets"
+    train_df = pd.concat(subset_train_data, levels=sample_labels)
+    print train_df.head()
+    train_labels = np.concatenate(subset_train_labels, axis=0)
 
-        prbs_and_labels = pd.concat([result, test_labels], axis=1)['prb']
-        prbs_and_labels.fillna(0.0, inplace=True)
-        prbs_and_labels.to_csv('test.bed', sep="\t", header=False)
+    print "Filtering out ambiguous labels"
+    non_ambiguous_labels = (train_labels > -0.5)
+    train_amb_filtered_mat = train_df.iloc[non_ambiguous_labels].as_matrix()
+    train_amb_filtered_labels = train_labels[non_ambiguous_labels]
 
-        from score import verify_file_and_build_scores_array, ClassificationResult
-        labels, scores = verify_file_and_build_scores_array(
-            labels_fname, "test.bed")
-        full_results = ClassificationResult(labels, scores.round(), scores)
-        print full_results
-        return
+    print "Fitting the model"
+    from sklearn.linear_model import SGDClassifier
+    mo = SGDClassifier(
+        loss='log', class_weight='balanced', n_jobs=16)
+    #from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
+    #mo = RandomForestClassifier(16, n_jobs=16)
+    #mo = GradientBoostingClassifier()
+    mo.fit(train_amb_filtered_mat, train_amb_filtered_labels)
 
-    prbs_and_labels.to_csv('test.bed', sep="\t", header=False)
+    print "Loading the test set"
+    true_labels_fname = "/mnt/data/TF_binding/DREAM_challenge/private_data/leaderboard/labels/{}.train.labels.tsv.gz".format(
+        factor)
+    label_data = LabelData(true_labels_fname)
+    print label_data.data.head()
+    print label_data.samples
+    assert len(label_data.samples) == 1
+    sample = label_data.samples[0]
+    dnase_peaks_fname = "/mnt/data/TF_binding/DREAM_challenge/public_data/DNASE/peaks/idr/DNASE.%s.conservative.narrowPeak.gz" % sample
 
+    print "Loading the test predictors"
+    sample_data = LabelData(true_labels_fname, dnase_peaks_fname)
+    dnase_scores = sample_data.load_or_build_dnase_fc_scores()
+    dnase_scores.columns = ['dnase_fc',]
+    print "Building the test data dataframe"
+    motif_scores = label_data.load_or_build_motif_scores('hg19.genome.fa')
+    sample_train_df = dnase_scores.join(motif_scores, how='inner')
+    print sample_train_df.head()
+    print "Predicting prbs"
+    pred_prbs = mo.predict_proba(sample_train_df)[:,1]
+    result = pd.DataFrame({'prb': pred_prbs}, index=sample_train_df.index)
+    result = result.reindex(label_data.data.index, fill_value=0.0)
+    print result.head()
+
+    ofname = 'F.{}.{}.tab'.format(factor, sample)
+    result.to_csv(ofname, sep="\t", header=False)
+    
+    from score import verify_file_and_build_scores_array, ClassificationResult
+    labels, scores = verify_file_and_build_scores_array(true_labels_fname, ofname)
+    full_results = ClassificationResult(labels, scores.round(), scores)
+    print full_results
+
+    return
 
 def main():
     #generate_label_data()
     #train_model()
-    easiest_model()
+    easiest_model(sys.argv[1]) #"CTCF")
     
 if __name__ == '__main__':
     main()

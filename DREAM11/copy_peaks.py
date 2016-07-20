@@ -281,6 +281,10 @@ def build_labels_for_sample_and_factor(
                 sample, factor)
             return
     print "Processing ", sample, factor
+    #print regions_fname
+    #print relaxed_peaks_fname
+    #print idr_peaks_fname
+    #assert False
     regions_bed = pybedtools.BedTool(regions_fname) #.sort() - already sorted
     relaxed_peaks_bed = pybedtools.BedTool(relaxed_peaks_fname).sort().merge()
     idr_peaks_bed = pybedtools.BedTool(idr_peaks_fname).sort().merge()
@@ -326,8 +330,61 @@ def build_labels_tsvs(regions, labels_dir, output_dir):
     run_in_parallel(16, build_labels_tsv, args)
     return
 
+def build_leaderboard_arrays():
+    regions_fname = \
+        "/mnt/data/TF_binding/DREAM_challenge/private_data/leaderboard/NOHEADER.only_ladder_regions.blacklistfiltered.bed.gz"
+    idr_peaks_dir = "/mnt/data/TF_binding/DREAM_challenge/ladderboard_chipseq_data/idr/"
+    relaxed_peaks_dir = "/mnt/data/TF_binding/DREAM_challenge/ladderboard_chipseq_data/relaxed/"
+    output_dir = "/mnt/data/TF_binding/DREAM_challenge/private_data/leaderboard/"
+
+    metadata = load_metadata()
+    ladderboard_samples = set(
+        (x.TF, x.CELL_TYPE)
+        for x in metadata
+        if x.LADDER_BOARD_SET is True
+    )
+    args = []
+    for tf_name, cell_type in ladderboard_samples:
+        idr_fname = "ChIPseq.{sample_name}.{tf_name}.conservative.train.narrowPeak.gz".format(
+            sample_name=cell_type, tf_name=tf_name)
+        idr_fname = os.path.join(idr_peaks_dir, idr_fname)
+        relaxed_peaks_fname = "ChIPseq.{sample_name}.{tf_name}.relaxed.narrowPeak.gz".format(
+            sample_name=cell_type, tf_name=tf_name)
+        relaxed_peaks_fname = os.path.join(relaxed_peaks_dir, relaxed_peaks_fname)
+        args.append([regions_fname, idr_fname, relaxed_peaks_fname, output_dir, True])
+    run_in_parallel(16, build_labels_for_sample_and_factor, args)
 
 def main():
+    #copy_ladderboard_chipseq_data()
+    return
+    regions_fname = \
+        "/mnt/data/TF_binding/DREAM_challenge/private_data/leaderboard/NOHEADER.only_ladder_regions.blacklistfiltered.bed.gz"
+    idr_peaks_dir = "/mnt/data/TF_binding/DREAM_challenge/ladderboard_chipseq_data/idr/"
+    relaxed_peaks_dir = "/mnt/data/TF_binding/DREAM_challenge/ladderboard_chipseq_data/relaxed/"
+    output_dir = "/mnt/data/TF_binding/DREAM_challenge/private_data/leaderboard/"
+
+    build_labels_tsvs(
+        regions_fname,
+        "/mnt/data/TF_binding/DREAM_challenge/private_data/leaderboard/arrays/",
+        "/mnt/data/TF_binding/DREAM_challenge/private_data/leaderboard/labels/")
+    return 
+    return
+    build_labels_for_sample_and_factor(
+        regions_fname,
+        idr_peaks_fname,
+        relaxed_peaks_fname,
+        output_directory,
+        overwrite=False)
+    #print ladderboard_samples
+    return
+    build_labels_for_sample_and_factor(
+        regions_fname,
+        idr_peaks_fname,
+        relaxed_peaks_fname,
+        output_directory,
+        overwrite=False
+    )
+
     #copy_private_chipseq_data()
     #copy_public_chipseq_data()
     #copy_DNASE_files()

@@ -16,7 +16,7 @@ def optional_gzip_open(fname):
     return gzip.open(fname) if fname.endswith(".gz") else open(fname)  
 
 # which measures to use to evaluate teh overall score
-MEASURE_NAMES = ['recall_at_10_fdr', 'recall_at_50_fdr', 'auPRC']
+MEASURE_NAMES = ['recall_at_10_fdr', 'recall_at_50_fdr', 'auPRC', 'auROC']
 ValidationResults = namedtuple('ValidationResults', MEASURE_NAMES)
 
 def recall_at_fdr(y_true, y_score, fdr_cutoff=0.05):
@@ -84,11 +84,14 @@ class ClassificationResult(object):
         prc = np.array([recall,precision])
         self.auPRC = auc(recall, precision)
         self.F1 = f1_score(positives, predicted_labels)
-        self.recall_at_50_fdr = recall_at_fdr(labels, predicted_prbs, fdr_cutoff=0.50)
-        self.recall_at_25_fdr = recall_at_fdr(labels, predicted_prbs, fdr_cutoff=0.25)
-        self.recall_at_10_fdr = recall_at_fdr(labels, predicted_prbs, fdr_cutoff=0.10)
-        self.recall_at_05_fdr = recall_at_fdr(labels, predicted_prbs, fdr_cutoff=0.05)
-
+        self.recall_at_50_fdr = recall_at_fdr(
+            labels, predicted_prbs, fdr_cutoff=0.50)
+        self.recall_at_25_fdr = recall_at_fdr(
+            labels, predicted_prbs, fdr_cutoff=0.25)
+        self.recall_at_10_fdr = recall_at_fdr(
+            labels, predicted_prbs, fdr_cutoff=0.10)
+        self.recall_at_05_fdr = recall_at_fdr(
+            labels, predicted_prbs, fdr_cutoff=0.05)
         return
 
     @property
@@ -284,7 +287,7 @@ def build_test_data():
     recalls_at_10_fdr = [0.654, 0.652, 0.651, 0.694, 0.624]
     recalls_at_50_fdr = [0.662, 0.662, 0.660, 0.672, 0.663]
     auPRCs = [0.679, 0.703, 0.697, 0.701, 0.702]
-    #auROCs = [0.978, 0.979, 0.982, 0.978, 0.979]
+    auROCs = [0.978, 0.979, 0.982, 0.978, 0.979]
 
     other_participants_results = [
         ValidationResults(*x) for x in zip(
@@ -294,7 +297,8 @@ def build_test_data():
     previous_scores = ValidationResults(
         random.choice(recalls_at_10_fdr),
         random.choice(recalls_at_50_fdr),
-        random.choice(auPRCs)
+        random.choice(auPRCs),
+        random.choice(auROCs)
     )
 
     return other_participants_results, previous_scores
@@ -309,8 +313,11 @@ def test_main():
     print combined_score, p_val, results
 
 def main():
-    labels_fname = sys.argv[1]
-    submission_fname = sys.argv[2]
+    try:
+        labels_fname = sys.argv[1]
+        submission_fname = sys.argv[2]
+    except IndexError:
+        print "usage: python score.py labels_fname submission_fname"
     labels, scores = verify_file_and_build_scores_array(
         labels_fname, submission_fname)
     full_results = ClassificationResult(labels, scores.round(), scores)
