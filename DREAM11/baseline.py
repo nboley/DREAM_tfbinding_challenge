@@ -423,31 +423,29 @@ def easiest_model(factor):
     label_data = LabelData(true_labels_fname)
     print label_data.data.head()
     print label_data.samples
-    assert len(label_data.samples) == 1
-    sample = label_data.samples[0]
-    dnase_peaks_fname = "/mnt/data/TF_binding/DREAM_challenge/public_data/DNASE/peaks/idr/DNASE.%s.conservative.narrowPeak.gz" % sample
+    for sample in label_data.samples:
+        print "Loading the test predictors"
+        dnase_peaks_fname = "/mnt/data/TF_binding/DREAM_challenge/public_data/DNASE/peaks/idr/DNASE.%s.conservative.narrowPeak.gz" % sample
+        sample_data = LabelData(true_labels_fname, dnase_peaks_fname)
+        dnase_scores = sample_data.load_or_build_dnase_fc_scores()[[sample,]]
+        dnase_scores.columns = ['dnase_fc',]
+        print "Building the test data dataframe"
+        motif_scores = label_data.load_or_build_motif_scores('hg19.genome.fa')
+        sample_train_df = dnase_scores.join(motif_scores, how='inner')
+        print sample_train_df.head()
+        print "Predicting prbs"
+        pred_prbs = mo.predict_proba(sample_train_df)[:,1]
+        result = pd.DataFrame({'prb': pred_prbs}, index=sample_train_df.index)
+        result = result.reindex(label_data.data.index, fill_value=0.0)
+        print result.head()
 
-    print "Loading the test predictors"
-    sample_data = LabelData(true_labels_fname, dnase_peaks_fname)
-    dnase_scores = sample_data.load_or_build_dnase_fc_scores()
-    dnase_scores.columns = ['dnase_fc',]
-    print "Building the test data dataframe"
-    motif_scores = label_data.load_or_build_motif_scores('hg19.genome.fa')
-    sample_train_df = dnase_scores.join(motif_scores, how='inner')
-    print sample_train_df.head()
-    print "Predicting prbs"
-    pred_prbs = mo.predict_proba(sample_train_df)[:,1]
-    result = pd.DataFrame({'prb': pred_prbs}, index=sample_train_df.index)
-    result = result.reindex(label_data.data.index, fill_value=0.0)
-    print result.head()
+        ofname = 'F.{}.{}.tab'.format(factor, sample)
+        result.to_csv(ofname, sep="\t", header=False)
 
-    ofname = 'F.{}.{}.tab'.format(factor, sample)
-    result.to_csv(ofname, sep="\t", header=False)
-    
-    from score import verify_file_and_build_scores_array, ClassificationResult
-    labels, scores = verify_file_and_build_scores_array(true_labels_fname, ofname)
-    full_results = ClassificationResult(labels, scores.round(), scores)
-    print full_results
+        from score import verify_file_and_build_scores_array, ClassificationResult
+        labels, scores = verify_file_and_build_scores_array(true_labels_fname, ofname)
+        full_results = ClassificationResult(labels, scores.round(), scores)
+        print full_results
 
     return
 
