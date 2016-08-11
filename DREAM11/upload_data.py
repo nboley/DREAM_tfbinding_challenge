@@ -1,5 +1,7 @@
 import os
 
+import urllib
+
 import synapseclient
 from synapseclient import Project, Folder, File, Link
 
@@ -7,8 +9,8 @@ syn = synapseclient.Synapse()
 syn.login('nboley', 'Sp33d427')
 
 
-chipseq_region_labels_id = "syn6153156"
-chipseq_region_scores_id = "syn6153160"
+#chipseq_region_labels_id = "syn6153156"
+#chipseq_region_scores_id = "syn6153160"
 
 ################################################################################
 #
@@ -18,7 +20,9 @@ def upload_dnase_bams():
     dnase_bams_id = "syn6176232"
     dnase_bams_path = "/mnt/data/TF_binding/DREAM_challenge/public_data/DNASE/bams/"
     parent = syn.get(dnase_bams_id)
+    print parent
     for fname in os.listdir(dnase_bams_path):
+        if not fname.startswith('DNASE.IMR90'): continue
         data = File(os.path.join(dnase_bams_path, fname), parent=parent)
         data.annotations['sample_type'] = fname.split(".")[1]
         data.annotations['biological_replicate'] = int(fname.split(".")[2][6:])
@@ -30,6 +34,9 @@ def upload_dnase_fold_coverage_wiggles():
     fold_coverage_wiggles_path = "/mnt/data/TF_binding/DREAM_challenge/public_data/DNASE/fold_coverage_wiggles/"
     parent = syn.get(dnase_wigs_id)
     for fname in os.listdir(fold_coverage_wiggles_path):
+        if fname != 'DNASE.induced_pluripotent_stem_cell.fc.signal.bigwig': continue
+        print fname
+        #continue
         data = File(
             os.path.join(fold_coverage_wiggles_path, fname), parent=parent)
         data.annotations['sample_type'] = fname.split(".")[1]
@@ -151,12 +158,38 @@ def upload_essential_data_tar():
     return
 
 def main():
-    upload_essential_data_tar()
+    #upload_essential_data_tar()
     #upload_rnaseq_data()
     #upload_annotations()
     #upload_dnase_data()
     #upload_chipseq_data()
+    #upload_dnase_bams()
     pass
 
+def last_revision_changed(data):
+    revs = data['results']
+    return len(set(rev['contentMd5'] for rev in revs)) > 1
+    return not (revs[0]['contentMd5'] == revs[-1]['contentMd5'])
+
+def find_copied_bams():
+    dnase_bams_id = "syn6176232"
+    results = syn.query('SELECT id, name FROM entity WHERE parentId=="{}"'.format(dnase_bams_id))
+    for x in results['results']:
+        fp = syn.get(x['entity.id'])
+        history = syn.restGET(
+            "/entity/{id}/version/".format(id=urllib.quote(x['entity.id']))
+        )
+        if history['totalNumberOfResults'] > 1 and last_revision_changed(history):
+            print history
+            print str(x['entity.name']) #, history['totalNumberOfResults']
+
+def download_DNASE_bams():
+    dnase_bams_id = "syn6176232"
+    results = syn.query('SELECT id, name FROM entity WHERE parentId=="{}"'.format(dnase_bams_id))
+    for x in results['results']:
+        fp = syn.get(x['entity.id'], downloadLocation='.')
+
 if __name__ == '__main__':
-    main()
+    upload_dnase_bams()
+    #find_copied_bams()
+    #upload_essential_data_tar()

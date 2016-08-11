@@ -425,7 +425,8 @@ def easiest_model(factor):
     print label_data.samples
     for sample in label_data.samples:
         print "Loading the test predictors"
-        dnase_peaks_fname = "/mnt/data/TF_binding/DREAM_challenge/public_data/DNASE/peaks/idr/DNASE.%s.conservative.narrowPeak.gz" % sample
+        dnase_peaks_fname = \
+            "/mnt/data/TF_binding/DREAM_challenge/public_data/DNASE/peaks/idr/DNASE.%s.conservative.narrowPeak.gz" % sample
         sample_data = LabelData(true_labels_fname, dnase_peaks_fname)
         dnase_scores = sample_data.load_or_build_dnase_fc_scores()[[sample,]]
         dnase_scores.columns = ['dnase_fc',]
@@ -442,10 +443,10 @@ def easiest_model(factor):
         ofname = 'F.{}.{}.tab'.format(factor, sample)
         result.to_csv(ofname, sep="\t", header=False)
 
-        from score import verify_file_and_build_scores_array, ClassificationResult
-        labels, scores = verify_file_and_build_scores_array(true_labels_fname, ofname)
-        full_results = ClassificationResult(labels, scores.round(), scores)
-        print full_results
+        #from score import verify_file_and_build_scores_array, ClassificationResult
+        #labels, scores = verify_file_and_build_scores_array(true_labels_fname, ofname)
+        #full_results = ClassificationResult(labels, scores.round(), scores)
+        #print full_results
 
     return
 
