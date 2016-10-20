@@ -19,22 +19,11 @@ import pandas as pd
 
 from bw import BigWig
 
-from pyTFbindtools.cross_validation import ClassificationResult
-
-from pyDNAbinding.binding_model import DNASequence, PWMBindingModel
+from pyDNAbinding.binding_model import DNASequence, PWMBindingModel, DNABindingModels, load_binding_models
 from pyDNAbinding.DB import (
     load_binding_models_from_db, NoBindingModelsFoundError, load_all_pwms_from_db)
 
 GenomicRegion = namedtuple('GenomicRegion', ['contig', 'start', 'stop'])
-
-def load_TAF1_binding_model():
-    with open("TAF1_motif.txt") as fp:
-        data = []
-        for line in fp:
-            if line.startswith(">"): continue
-            data.append(line.split()[1:])
-    data = np.array(data, dtype='float')
-    return PWMBindingModel(data)
 
 aggregate_region_scores_labels = [
     "mean", "max", "q99", "q95", "q90", "q75", "q50"]
@@ -50,6 +39,15 @@ def md5(fname):
         for chunk in iter(lambda: f.read(4096), b""):
             hash_md5.update(chunk)
     return hash_md5.hexdigest()
+
+def load_TAF1_binding_model():
+    with open("TAF1_motif.txt") as fp:
+        data = []
+        for line in fp:
+            if line.startswith(">"): continue
+            data.append(line.split()[1:])
+    data = np.array(data, dtype='float')
+    return PWMBindingModel(data, tf_name='TAF1')
 
 class LabelData(object):
     def __len__(self):
@@ -196,17 +194,8 @@ class LabelData(object):
     def build_motif_scores(self, fasta_fname):
         all_agg_scores = np.zeros(
             (len(self), len(aggregate_region_scores_labels)), dtype=float)
-        try:
-            models = load_binding_models_from_db(tf_names=[self.factor,])
-            assert len(models) == 1, "Multiple binding models found for '{}'".format(self.factor)
-        except NoBindingModelsFoundError:
-            # if we couldnt find a good motif, just find any motif
-            # special case TAF1 because it doesnt exist in CISBP
-            if self.factor == 'TAF1':
-                models = [load_TAF1_binding_model(),]
-            else:
-                models = load_all_pwms_from_db(tf_names=self.factor)
-        model = models[0]
+        binding_models = load_binding_models("models.yaml")
+        model = binding_models.get_from_tfname(self.factor)
         for i, seq in enumerate(self.iter_seqs(fasta_fname)):
             if i%1000000 == 0: print >> sys.stderr, i, len(self)
             all_agg_scores[i,:] = aggregate_region_scores(
@@ -277,7 +266,8 @@ class LabelData(object):
         rv = pd.concat([motif_scores, dnase_scores], axis=1)
         rv.columns = list(motif_scores.columns) + ['dnase_score',]
         return rv
-    
+
+"""    
 def load_DNASE_regions_bed():
     try:
         return pybedtools.BedTool("merged_regions.relaxed.bed")
@@ -316,66 +306,10 @@ def load_dnase_filtered_regions(regions_fname):
         dnase_regions_bed, wa=True)
     dnase_filtered_regions_bed.saveas(cached_fname)
     return dnase_filtered_regions_bed
+"""
 
-
-def train_model():
-    fasta_fname = sys.argv[2]
-    train_data = LabelData(
-        sys.argv[1], regions_fname=load_DNASE_regions_bed().fn) #, max_n_rows=1000000)
-
-    labels = []
-    for sample_index, sample_name in enumerate(train_data.samples):
-        labels.append(train_data.build_integer_labels(sample_index))
-    labels = np.concatenate(labels, axis=0)
-    
-    df = train_data.dataframe(fasta_fname)
-    
-    # filter out ambiguous labels
-    df = df.ix[labels > -0.5]
-    labels = labels[labels > -0.5]    
-    print itemfreq(labels)
-
-    from sklearn.ensemble import GradientBoostingClassifier, RandomForestClassifier
-    from sklearn.linear_model import LogisticRegression, SGDClassifier
-    #from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
-    from sklearn.cross_validation import KFold
-    for train_i, test_i in KFold(labels.shape[0], n_folds=5, shuffle=False):
-        train_df = np.nan_to_num(df.ix[train_i,:])
-        train_labels = labels[train_i]
-        test_df = np.nan_to_num(df.ix[test_i,:])
-        test_labels = labels[test_i]
-        if False:
-            ones_labels = np.nonzero(train_labels == 1)[0]
-            zeros_labels = np.nonzero(train_labels == 0)[0]
-            # subsample the zero labels to be balanced
-            balanced_zero_labels = np.random.choice(
-                zeros_labels.ravel(), len(ones_labels), replace=False)
-            balanced_indices = np.concatenate(
-                [balanced_zero_labels, ones_labels], axis=0)
-            train_df = train_df[balanced_indices,:]
-            train_labels = train_labels[balanced_indices]
-            print itemfreq(train_labels)
-
-        
-        #mo = RandomForestClassifier(16, n_jobs=16)
-        #mo = GradientBoostingClassifier(
-        #    max_depth=6, n_estimators=100) #, learning_rate=1.0)
-        #mo = LogisticRegression()
-        mo = SGDClassifier(
-            loss='log', class_weight='balanced', n_jobs=16)
-        mo.fit(train_df, train_labels)
-
-        pred = mo.predict(train_df)
-        pred_proba = mo.predict_proba(train_df)[:,1]
-        print ClassificationResult(train_labels, pred, pred_proba)
-
-        pred = mo.predict(test_df)
-        pred_proba = mo.predict_proba(test_df)[:,1]
-        print ClassificationResult(labels[test_i], pred, pred_proba)
-        print
-
-def easiest_model(factor):
-    """Build a debugging model using CTCF.
+def train_model(factor):
+    """Train a simple model to predict in-vivo binding.
     
     """
     labels_fname = "/mnt/data/TF_binding/DREAM_challenge/public_data/chipseq/labels/tsvs/{}.train.labels.tsv.gz".format(factor)
@@ -384,7 +318,6 @@ def easiest_model(factor):
     subset_train_data = []
     subset_train_labels = []
     for sample_i, sample in enumerate(all_data.samples):
-        #if sample_i > 1: break
         print sample_i, sample
         sample_labels.append(sample)
         dnase_peaks_fname = \
@@ -412,16 +345,12 @@ def easiest_model(factor):
     from sklearn.linear_model import SGDClassifier
     mo = SGDClassifier(
         loss='log', class_weight='balanced', n_jobs=16)
-    #from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
-    #mo = RandomForestClassifier(16, n_jobs=16)
-    #mo = GradientBoostingClassifier()
     mo.fit(train_amb_filtered_mat, train_amb_filtered_labels)
 
     print "Loading the test set"
     true_labels_fname = "/mnt/data/TF_binding/DREAM_challenge/private_data/leaderboard/labels/{}.train.labels.tsv.gz".format(
         factor)
     label_data = LabelData(true_labels_fname)
-    print label_data.data.head()
     print label_data.samples
     for sample in label_data.samples:
         print "Loading the test predictors"
@@ -442,18 +371,74 @@ def easiest_model(factor):
 
         ofname = 'F.{}.{}.tab'.format(factor, sample)
         result.to_csv(ofname, sep="\t", header=False)
-
-        #from score import verify_file_and_build_scores_array, ClassificationResult
-        #labels, scores = verify_file_and_build_scores_array(true_labels_fname, ofname)
-        #full_results = ClassificationResult(labels, scores.round(), scores)
-        #print full_results
-
     return
 
+def load_model(factor_name):
+    """Load models from the DB.
+
+    This isn't useful - I just keep it here to show where the models came from.
+    """
+    try:
+        models = load_binding_models_from_db(tf_names=[factor_name,])
+        assert len(models) == 1, "Multiple binding models found for '{}'".format(factor_name)
+    except NoBindingModelsFoundError:
+        # if we couldnt find a good motif, just find any motif
+        # special case TAF1 because it doesnt exist in CISBP
+        if factor_name == 'TAF1':
+            models = [load_TAF1_binding_model(),]
+        else:
+            models = load_all_pwms_from_db(tf_names=factor_name)
+    model = models[0]
+    return model
+
+def save_models():
+    """Save models from all factors
+
+    This isn't useful - I just keep it here to show where the models came from.
+    """
+    factor_names = """
+    ARID3A
+    ATF2
+    ATF3
+    ATF7
+    CEBPB
+    CREB1
+    CTCF
+    E2F1
+    E2F6
+    EGR1
+    EP300
+    FOXA1
+    FOXA2
+    GABPA
+    GATA3
+    HNF4A
+    JUND
+    MAFK
+    MAX
+    MYC
+    NANOG
+    REST
+    RFX5
+    SPI1
+    SRF
+    STAT3
+    TAF1
+    TCF12
+    TCF7L2
+    TEAD4
+    YY1
+    ZNF143
+    """.split()
+    mos = []
+    for factor_name in factor_names:
+        mos.append(load_model(factor_name))
+    mos = DNABindingModels(mos)
+    with open("models.yaml", "w") as ofp:
+        ofp.write(mos.yaml_str)
+
 def main():
-    #generate_label_data()
-    #train_model()
-    easiest_model(sys.argv[1]) #"CTCF")
-    
+    train_model()
+
 if __name__ == '__main__':
     main()

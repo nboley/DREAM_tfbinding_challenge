@@ -198,6 +198,21 @@ def copy_ladderboard_chipseq_data():
     )
     return
 
+def copy_test_chipseq_data():
+    metadata = load_metadata()
+    test_sample_dirs = set(
+        x.SAMPLE_NAME for x in metadata
+        if x.HIDDEN_TEST_SET is True
+    )
+    copy_chipseq_data(
+        sample_dirs=test_sample_dirs,
+        idr_peaks_output_dir="/mnt/data/TF_binding/DREAM_challenge/hidden_test_set_chipseq_data/idr/",
+        relaxed_peaks_output_dir="/mnt/data/TF_binding/DREAM_challenge/hidden_test_set_chipseq_data/relaxed/",
+        fold_change_output_dir="/mnt/data/TF_binding/DREAM_challenge/hidden_test_set_chipseq_data/fold_change_signal/",
+        regions_bed_fname="/mnt/data/TF_binding/DREAM_challenge/public_data/annotations/test_regions.blacklistfiltered.merged.bed"
+    )
+    return
+
 
 
 def copy_DNASE_files():
@@ -354,9 +369,51 @@ def build_leaderboard_arrays():
         args.append([regions_fname, idr_fname, relaxed_peaks_fname, output_dir, True])
     run_in_parallel(16, build_labels_for_sample_and_factor, args)
 
-def main():
-    #copy_ladderboard_chipseq_data()
+def build_hidden_test_set_arrays():
+    regions_fname = \
+        "/mnt/data/TF_binding/DREAM_challenge/public_data/annotations/test_regions.blacklistfiltered.bed.gz"
+    idr_peaks_dir = "/mnt/data/TF_binding/DREAM_challenge/hidden_test_set_chipseq_data/idr/"
+    relaxed_peaks_dir = "/mnt/data/TF_binding/DREAM_challenge/hidden_test_set_chipseq_data/relaxed/"
+    output_dir = "/mnt/data/TF_binding/DREAM_challenge/hidden_test_set_chipseq_data/arrays/"
+
+    metadata = load_metadata()
+    ladderboard_samples = set(
+        (x.TF, x.CELL_TYPE)
+        for x in metadata
+        if x.HIDDEN_TEST_SET is True
+    )
+    args = []
+    for tf_name, cell_type in ladderboard_samples:
+        idr_fname = "ChIPseq.{sample_name}.{tf_name}.conservative.train.narrowPeak.gz".format(
+            sample_name=cell_type, tf_name=tf_name)
+        idr_fname = os.path.join(idr_peaks_dir, idr_fname)
+        relaxed_peaks_fname = "ChIPseq.{sample_name}.{tf_name}.relaxed.narrowPeak.gz".format(
+            sample_name=cell_type, tf_name=tf_name)
+        relaxed_peaks_fname = os.path.join(relaxed_peaks_dir, relaxed_peaks_fname)
+        args.append([regions_fname, idr_fname, relaxed_peaks_fname, output_dir, True])
+    run_in_parallel(16, build_labels_for_sample_and_factor, args)
+
+
+def build_test_data():
+    copy_test_chipseq_data()
+    build_hidden_test_set_arrays()
+    regions_fname = \
+        "/mnt/data/TF_binding/DREAM_challenge/public_data/annotations/test_regions.blacklistfiltered.bed.gz"
+    build_labels_tsvs(
+        regions_fname,
+        "/mnt/data/TF_binding/DREAM_challenge/hidden_test_set_chipseq_data/arrays/",
+        "/mnt/data/TF_binding/DREAM_challenge/hidden_test_set_chipseq_data/tsvs/")
     return
+
+def main():
+    regions_fname = \
+        "/mnt/data/TF_binding/DREAM_challenge/public_data/annotations/train_regions.blacklistfiltered.bed.gz"
+    build_labels_tsvs(
+        regions_fname,
+        "/mnt/data/TF_binding/DREAM_challenge/public_data/chipseq/labels/arrays/",
+        "/mnt/data/TF_binding/DREAM_challenge/public_data/chipseq/labels/tsvs/")
+
+    """
     regions_fname = \
         "/mnt/data/TF_binding/DREAM_challenge/private_data/leaderboard/NOHEADER.only_ladder_regions.blacklistfiltered.bed.gz"
     idr_peaks_dir = "/mnt/data/TF_binding/DREAM_challenge/ladderboard_chipseq_data/idr/"
@@ -384,7 +441,8 @@ def main():
         output_directory,
         overwrite=False
     )
-
+    """
+    
     #copy_private_chipseq_data()
     #copy_public_chipseq_data()
     #copy_DNASE_files()
